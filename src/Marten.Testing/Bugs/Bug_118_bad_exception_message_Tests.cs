@@ -1,11 +1,13 @@
-﻿using System.Linq;
+using System.Linq;
+using Marten.Exceptions;
 using Marten.Linq;
 using Marten.Services;
+using Marten.Testing.Harness;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_118_bad_exception_message_Tests : DocumentSessionFixture<NulloIdentityMap>
+    public class Bug_118_bad_exception_message_Tests: BugIntegrationContext
     {
         public class TestClass
         {
@@ -22,5 +24,6 @@ namespace Marten.Testing.Bugs
                 theSession.Query<TestClass>().Where(x => x.Id == TestNullObject.Id).ToList();
             });
         }
+
     }
 }

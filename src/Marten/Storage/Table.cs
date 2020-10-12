@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data.Common;
@@ -14,9 +14,9 @@ namespace Marten.Storage
     /// <summary>
     /// Model a database table in Postgresql
     /// </summary>
-    public class Table : ISchemaObject, IEnumerable<TableColumn>
+    public class Table: ISchemaObject, IEnumerable<TableColumn>
     {
-        public readonly List<TableColumn> _columns = new List<TableColumn>();
+        public readonly List<TableColumn> Columns = new List<TableColumn>();
 
         public DbObjectName Identifier { get; }
 
@@ -40,27 +40,27 @@ namespace Marten.Storage
 
         public Table(DbObjectName name)
         {
-            Identifier = name;
+            Identifier = name ?? throw new ArgumentNullException(nameof(name));
         }
 
         public void AddPrimaryKey(TableColumn column)
         {
-            PrimaryKey = column;
+            PrimaryKey = column ?? throw new ArgumentNullException(nameof(column));
             column.Directive = $"CONSTRAINT pk_{Identifier.Name} PRIMARY KEY";
-            _columns.Add(column);
+            Columns.Add(column);
         }
 
         public void AddPrimaryKeys(List<TableColumn> columns)
         {
             PrimaryKeys.AddRange(columns);
-            _columns.AddRange(columns);
+            Columns.AddRange(columns);
         }
 
         public TableColumn PrimaryKey { get; private set; }
 
         public void AddColumn<T>() where T : TableColumn, new()
         {
-            _columns.Add(new T());
+            Columns.Add(new T());
         }
 
         public TableColumn AddColumn(string name, string type, string directive = null)
@@ -77,26 +77,26 @@ namespace Marten.Storage
 
         public void AddColumn(TableColumn column)
         {
-            _columns.Add(column);
+            Columns.Add(column);
         }
 
         public TableColumn Column(string name)
         {
-            return _columns.FirstOrDefault(x => x.Name.EqualsIgnoreCase(name));
+            return Columns.FirstOrDefault(x => x.Name.EqualsIgnoreCase(name));
         }
 
         public void ReplaceOrAddColumn(string name, string type, string directive = null)
         {
             var column = new TableColumn(name, type) { Directive = directive };
-            var columnIndex = _columns.FindIndex(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+            var columnIndex = Columns.FindIndex(c => c.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
             if (columnIndex >= 0)
             {
-                _columns[columnIndex] = column;
+                Columns[columnIndex] = column;
             }
             else
             {
-                _columns.Add(column);
+                Columns.Add(column);
             }
         }
 
@@ -107,7 +107,7 @@ namespace Marten.Storage
 
         public IEnumerator<TableColumn> GetEnumerator()
         {
-            return _columns.GetEnumerator();
+            return Columns.GetEnumerator();
         }
 
         public readonly IList<string> Constraints = new List<string>();
@@ -124,9 +124,9 @@ namespace Marten.Storage
                 writer.WriteLine("CREATE TABLE IF NOT EXISTS {0} (", Identifier);
             }
 
-            var length = _columns.Select(x => x.Name.Length).Max() + 4;
+            var length = Columns.Select(x => x.Name.Length).Max() + 4;
 
-            var lines = _columns.Select(x => x.ToDeclaration(length)).Concat(Constraints).ToArray();
+            var lines = Columns.Select(x => x.ToDeclaration(length)).Concat(Constraints).ToArray();
 
             for (int i = 0; i < lines.Length - 1; i++)
             {
@@ -159,7 +159,6 @@ namespace Marten.Storage
 
         public List<TableColumn> PrimaryKeys { get; } = new List<TableColumn>();
 
-
         public void WriteDropStatement(DdlRules rules, StringWriter writer)
         {
             writer.WriteLine($"DROP TABLE IF EXISTS {Identifier} CASCADE;");
@@ -171,19 +170,18 @@ namespace Marten.Storage
             var nameParam = builder.AddParameter(Identifier.Name).ParameterName;
 
             builder.Append($@"
-select column_name, data_type, character_maximum_length 
+select column_name, data_type, character_maximum_length, udt_name
 from information_schema.columns where table_schema = :{schemaParam} and table_name = :{nameParam}
 order by ordinal_position;
 
 select a.attname, format_type(a.atttypid, a.atttypmod) as data_type
 from pg_index i
 join   pg_attribute a on a.attrelid = i.indrelid and a.attnum = ANY(i.indkey)
-where attrelid = (select pg_class.oid 
-                  from pg_class 
+where attrelid = (select pg_class.oid
+                  from pg_class
                   join pg_catalog.pg_namespace n ON n.oid = pg_class.relnamespace
                   where n.nspname = :{schemaParam} and relname = :{nameParam})
-and i.indisprimary; 
-
+and i.indisprimary;
 
 SELECT
   U.usename                AS user_name,
@@ -212,16 +210,26 @@ FROM pg_index AS idx
   JOIN pg_user AS U ON i.relowner = U.usesysid
 WHERE
   nspname = :{schemaParam} AND
-  NOT nspname LIKE 'pg%' AND 
+  NOT nspname LIKE 'pg%' AND
   i.relname like 'mt_%';
 
-select constraint_name 
-from information_schema.table_constraints as c
-where 
-  c.constraint_name LIKE 'mt_%' and 
-  c.constraint_type = 'FOREIGN KEY' and 
-  c.table_schema = :{schemaParam} and
-  c.table_name = :{nameParam};
+SELECT c.conname                                     AS constraint_name,
+       c.contype                                     AS constraint_type,
+       sch.nspname                                   AS schema_name,
+       tbl.relname                                   AS table_name,
+       ARRAY_AGG(col.attname ORDER BY u.attposition) AS columns,
+       pg_get_constraintdef(c.oid)                   AS definition
+FROM pg_constraint c
+       JOIN LATERAL UNNEST(c.conkey) WITH ORDINALITY AS u(attnum, attposition) ON TRUE
+       JOIN pg_class tbl ON tbl.oid = c.conrelid
+       JOIN pg_namespace sch ON sch.oid = tbl.relnamespace
+       JOIN pg_attribute col ON (col.attrelid = tbl.oid AND col.attnum = u.attnum)
+WHERE
+	c.conname like 'mt_%' and
+	c.contype = 'f' and
+	sch.nspname = :{schemaParam} and
+	tbl.relname = :{nameParam}
+GROUP BY constraint_name, constraint_type, schema_name, table_name, definition;
 
 ");
         }
@@ -244,7 +252,8 @@ where
         public TableDelta FetchDelta(NpgsqlConnection conn)
         {
             var actual = FetchExisting(conn);
-            if (actual == null) return null;
+            if (actual == null)
+                return null;
 
             return new TableDelta(this, actual);
         }
@@ -270,6 +279,10 @@ where
             {
                 if (autoCreate == AutoCreate.All)
                 {
+                    delta.ForeignKeyMissing.Each(x => patch.Updates.Apply(this, x));
+                    delta.ForeignKeyRollbacks.Each(x => patch.Rollbacks.Apply(this, x));
+                    delta.ForeignKeyMissingRollbacks.Each(x => patch.Rollbacks.Apply(this, x));
+
                     Write(patch.Rules, patch.UpWriter);
 
                     return SchemaPatchDifference.Create;
@@ -292,7 +305,9 @@ where
             delta.IndexChanges.Each(x => patch.Updates.Apply(this, x));
             delta.IndexRollbacks.Each(x => patch.Rollbacks.Apply(this, x));
 
-            delta.MissingForeignKeys.Each(x => patch.Updates.Apply(this, x.ToDDL()));
+            delta.ForeignKeyChanges.Each(x => patch.Updates.Apply(this, x));
+            delta.ForeignKeyRollbacks.Each(x => patch.Rollbacks.Apply(this, x));
+            delta.ForeignKeyMissingRollbacks.Each(x => patch.Rollbacks.Apply(this, x));
 
             return SchemaPatchDifference.Update;
         }
@@ -304,8 +319,8 @@ where
             var indexes = readIndexes(reader);
             var constraints = readConstraints(reader);
 
-
-            if (!columns.Any()) return null;
+            if (!columns.Any())
+                return null;
 
             var existing = new Table(Identifier);
             foreach (var column in columns)
@@ -321,22 +336,20 @@ where
             existing.ActualIndices = indexes;
             existing.ActualForeignKeys = constraints;
 
-
             return existing;
         }
 
-        public List<string> ActualForeignKeys { get; set; } = new List<string>();
+        public List<ActualForeignKey> ActualForeignKeys { get; set; } = new List<ActualForeignKey>();
 
         public Dictionary<string, ActualIndex> ActualIndices { get; set; } = new Dictionary<string, ActualIndex>();
 
-
-        private static List<string> readConstraints(DbDataReader reader)
+        private List<ActualForeignKey> readConstraints(DbDataReader reader)
         {
             reader.NextResult();
-            var constraints = new List<string>();
+            var constraints = new List<ActualForeignKey>();
             while (reader.Read())
             {
-                constraints.Add(reader.GetString(0));
+                constraints.Add(new ActualForeignKey(Identifier, reader.GetString(0), reader.GetString(5)));
             }
 
             return constraints;
@@ -349,7 +362,8 @@ where
             reader.NextResult();
             while (reader.Read())
             {
-                if (reader.IsDBNull(2)) continue;
+                if (reader.IsDBNull(2))
+                    continue;
 
                 var schemaName = reader.GetString(1);
                 var tableName = reader.GetString(2);
@@ -361,8 +375,6 @@ where
 
                     dict.Add(index.Name, index);
                 }
-
-
             }
 
             return dict;
@@ -386,6 +398,11 @@ where
             {
                 var column = new TableColumn(reader.GetString(0), reader.GetString(1));
 
+                if (column.Type.Equals("user-defined"))
+                {
+                    column.Type = reader.GetString(3);
+                }
+
                 if (!reader.IsDBNull(2))
                 {
                     var length = reader.GetInt32(2);
@@ -399,43 +416,46 @@ where
 
         public void SetPrimaryKey(string columnName)
         {
-            var column = _columns.FirstOrDefault(x => x.Name == columnName);
+            var column = Columns.FirstOrDefault(x => x.Name == columnName);
             PrimaryKey = column;
         }
 
         public bool HasColumn(string columnName)
         {
-            return _columns.Any(x => x.Name == columnName);
+            return Columns.Any(x => x.Name == columnName);
         }
 
         public TableColumn ColumnFor(string columnName)
         {
-            return _columns.FirstOrDefault(x => x.Name == columnName);
+            return Columns.FirstOrDefault(x => x.Name == columnName);
         }
 
         public void RemoveColumn(string columnName)
         {
-            _columns.RemoveAll(x => x.Name == columnName);
+            Columns.RemoveAll(x => x.Name == columnName);
         }
 
         protected bool Equals(Table other)
         {
-            return _columns.OrderBy(x => x.Name).SequenceEqual(other.OrderBy(x => x.Name)) && Equals(PrimaryKey, other.PrimaryKey) && Identifier.Equals(other.Identifier);
+            return Columns.OrderBy(x => x.Name).SequenceEqual(other.OrderBy(x => x.Name)) && Equals(PrimaryKey, other.PrimaryKey) && Identifier.Equals(other.Identifier);
         }
 
         public override bool Equals(object obj)
         {
-            if (ReferenceEquals(null, obj)) return false;
-            if (ReferenceEquals(this, obj)) return true;
-            if (!obj.GetType().CanBeCastTo<Table>()) return false;
-            return Equals((Table) obj);
+            if (ReferenceEquals(null, obj))
+                return false;
+            if (ReferenceEquals(this, obj))
+                return true;
+            if (!obj.GetType().CanBeCastTo<Table>())
+                return false;
+            return Equals((Table)obj);
         }
 
         public override int GetHashCode()
         {
             unchecked
             {
-                var hashCode = (_columns != null ? _columns.GetHashCode() : 0);
+                var hashCode = (Columns != null ? Columns.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (PrimaryKey != null ? PrimaryKey.GetHashCode() : 0);
                 hashCode = (hashCode * 397) ^ (Identifier != null ? Identifier.GetHashCode() : 0);
                 return hashCode;

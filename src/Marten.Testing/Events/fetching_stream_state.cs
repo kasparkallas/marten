@@ -1,13 +1,14 @@
-﻿using System;
+using System;
 using System.Threading.Tasks;
 using Marten.Services;
 using Marten.Testing.Events.Projections;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events
 {
-    public class fetching_stream_state_before_aggregator_is_registered : IntegratedFixture
+    public class fetching_stream_state_before_aggregator_is_registered: IntegrationContext
     {
         [Fact]
         public async Task bug_705_order_of_operation()
@@ -20,21 +21,17 @@ namespace Marten.Testing.Events
                 var departed = new MembersDeparted { Members = new[] { "Thom" } };
 
                 session.Events.StartStream<QuestParty>(streamId, joined, departed);
-                session.SaveChanges();
+                await session.SaveChangesAsync();
             }
 
             using (var query = theStore.OpenSession())
             {
                 var state = await query.Events.FetchStreamStateAsync(streamId);
                 var aggregate = await query.Events.AggregateStreamAsync<QuestParty>(streamId);
-                
-                
 
                 state.ShouldNotBeNull();
                 aggregate.ShouldNotBeNull();
             }
-
-
         }
 
         [Fact]
@@ -69,6 +66,10 @@ namespace Marten.Testing.Events
                 var aggregate = session.Events.AggregateStream<FooAggregate>(aid);
             }
         }
+
+        public fetching_stream_state_before_aggregator_is_registered(DefaultStoreFixture fixture) : base(fixture)
+        {
+        }
     }
 
     public class FooEvent { }
@@ -78,13 +79,12 @@ namespace Marten.Testing.Events
         public Guid Id;
     }
 
-
     // SAMPLE: fetching_stream_state
-    public class fetching_stream_state : DocumentSessionFixture<NulloIdentityMap>
+    public class fetching_stream_state: IntegrationContext
     {
         private Guid theStreamId;
 
-        public fetching_stream_state()
+        public fetching_stream_state(DefaultStoreFixture fixture) : base(fixture)
         {
             var joined = new MembersJoined { Members = new string[] { "Rand", "Matt", "Perrin", "Thom" } };
             var departed = new MembersDeparted { Members = new[] { "Thom" } };
@@ -92,8 +92,6 @@ namespace Marten.Testing.Events
             theStreamId = theSession.Events.StartStream<Quest>(joined, departed).Id;
             theSession.SaveChanges();
         }
-
-
 
         [Fact]
         public void can_fetch_the_stream_version_and_aggregate_type()
@@ -134,7 +132,6 @@ namespace Marten.Testing.Events
             state.Version.ShouldBe(2);
             state.AggregateType.ShouldBe(typeof(Quest));
             state.LastTimestamp.ShouldNotBe(DateTime.MinValue);
-
         }
 
         [Fact]
@@ -151,5 +148,6 @@ namespace Marten.Testing.Events
             events.Count.ShouldBe(2);
         }
     }
+
     // ENDSAMPLE
 }

@@ -1,24 +1,22 @@
-﻿using System;
 using System.Linq;
 using System.Threading.Tasks;
-using Marten.Events;
 using Marten.Events.Projections;
 using Marten.Events.Projections.Async;
 using Marten.Storage;
 using Marten.Testing.CodeTracker;
+using Marten.Testing.Harness;
 using NSubstitute;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events.Projections.Async
 {
-
-    public class when_caching_pages : ProjectionTrackContext
+    public class when_caching_pages: ProjectionTrackContext
     {
         [Fact]
         public async Task stores_the_first_page()
         {
-            var thePage = new EventPage(0, 100, EventMother.Random(100)) ;
+            var thePage = new EventPage(0, 100, EventMother.Random(100));
 
             await theProjectionTrack.CachePage(thePage).ConfigureAwait(false);
 
@@ -29,7 +27,7 @@ namespace Marten.Testing.Events.Projections.Async
         [Fact]
         public async Task should_queue_the_page_on_each_projection_on_the_first_one()
         {
-            var thePage = new EventPage(0, 100, EventMother.Random(100)) ;
+            var thePage = new EventPage(0, 100, EventMother.Random(100));
 
             await theProjectionTrack.CachePage(thePage).ConfigureAwait(false);
         }
@@ -56,9 +54,7 @@ namespace Marten.Testing.Events.Projections.Async
         }
     }
 
-
-
-    public class when_stopping_a_projection_track : ProjectionTrackContext
+    public class when_stopping_a_projection_track: ProjectionTrackContext
     {
         [Fact]
         public async Task should_stop_the_fetcher_and_projections()
@@ -68,21 +64,18 @@ namespace Marten.Testing.Events.Projections.Async
             await theProjectionTrack.Stop().ConfigureAwait(false);
 
             await theFetcher.Received().Stop();
-
         }
-
     }
 
-    public class when_storing_progress : ProjectionTrackContext
+    public class when_storing_progress: ProjectionTrackContext
     {
         [Fact]
         public async Task store_progress_removes_obsolete_page()
         {
-            var thePage = new EventPage(0, 100, EventMother.Random(100)) ;
+            var thePage = new EventPage(0, 100, EventMother.Random(100));
             var thePage2 = new EventPage(101, 200, EventMother.Random(100));
             await theProjectionTrack.CachePage(thePage).ConfigureAwait(false);
             await theProjectionTrack.CachePage(thePage2).ConfigureAwait(false);
-
 
             await theProjectionTrack.StoreProgress(typeof(ActiveProject), thePage).ConfigureAwait(false);
 
@@ -95,9 +88,8 @@ namespace Marten.Testing.Events.Projections.Async
         {
             theFetcher.State.Returns(FetcherState.Paused);
 
-            var thePage = new EventPage(0, 100, EventMother.Random(100)) ;
+            var thePage = new EventPage(0, 100, EventMother.Random(100));
             await theProjectionTrack.CachePage(thePage).ConfigureAwait(false);
-
 
             await theProjectionTrack.StoreProgress(typeof(ActiveProject), thePage).ConfigureAwait(false);
 
@@ -105,7 +97,7 @@ namespace Marten.Testing.Events.Projections.Async
         }
     }
 
-
+    [Collection("projection_track")]
     public abstract class ProjectionTrackContext
     {
         protected readonly IFetcher theFetcher = Substitute.For<IFetcher>();
@@ -118,12 +110,14 @@ namespace Marten.Testing.Events.Projections.Async
 
             projection.AsyncOptions.Returns(new AsyncOptions());
 
-            theProjectionTrack = new ProjectionTrack(theFetcher, TestingDocumentStore.Basic(), projection, Substitute.For<IDaemonLogger>(), new StubErrorHandler(), Substitute.For<ITenant>());
+            var store = DocumentStore.For(x =>
+            {
+                x.Connection(ConnectionSource.ConnectionString);
+                x.AutoCreateSchemaObjects = AutoCreate.All;
+                x.DatabaseSchemaName = "projection_track";
+            });
 
-
-
+            theProjectionTrack = new ProjectionTrack(theFetcher, store, projection, Substitute.For<IDaemonLogger>(), new StubErrorHandler(), Substitute.For<ITenant>());
         }
-
-
     }
 }

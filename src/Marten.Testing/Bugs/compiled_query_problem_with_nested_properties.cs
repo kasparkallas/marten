@@ -1,13 +1,15 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Marten.Linq;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class compiled_query_problem_with_nested_properties : IntegratedFixture
+    public class compiled_query_problem_with_nested_properties: IntegrationContext
     {
         [Fact]
         public void can_do_a_compiled_query_on_nested_property()
@@ -16,15 +18,19 @@ namespace Marten.Testing.Bugs
 
             using (var session = theStore.QuerySession())
             {
-                var list = session.Query(new CompiledNestedQuery {Number = 5}).ToList();
+                var list = session.Query(new CompiledNestedQuery { Number = 5 }).ToList();
                 list.ShouldNotBeNull();
             }
         }
+
+        public compiled_query_problem_with_nested_properties(DefaultStoreFixture fixture) : base(fixture)
+        {
+        }
     }
 
-    public class CompiledNestedQuery : ICompiledListQuery<Target>
+    public class CompiledNestedQuery: ICompiledListQuery<Target>
     {
-        Expression<Func<IQueryable<Target>, IEnumerable<Target>>> ICompiledQuery<Target, IEnumerable<Target>>.QueryIs()
+        Expression<Func<IMartenQueryable<Target>, IEnumerable<Target>>> ICompiledQuery<Target, IEnumerable<Target>>.QueryIs()
         {
             return q => q.Where(x => x.Inner.Number == Number);
         }

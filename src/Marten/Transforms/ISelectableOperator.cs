@@ -1,4 +1,6 @@
+using Marten.Internal;
 using Marten.Linq;
+using Marten.Linq.SqlGeneration;
 using Marten.Schema;
 using Marten.Storage;
 
@@ -6,6 +8,6 @@ namespace Marten.Transforms
 {
     public interface ISelectableOperator
     {
-        ISelector<T> BuildSelector<T>(string dataLocator, ITenant schema, IQueryableDocument document);
+        SelectorStatement ModifyStatement(SelectorStatement statement, IMartenSession session);
     }
 }

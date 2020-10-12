@@ -1,20 +1,26 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Baseline;
 using Marten.Storage;
 using Marten.Testing.Events.Projections;
 using Marten.Testing.Events.Utils;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events
 {
-    public class end_to_end_event_capture_and_fetching_the_stream_Tests
+    [Collection("projections")]
+    public class end_to_end_event_capture_and_fetching_the_stream_Tests : OneOffConfigurationsContext
     {
         private static readonly string[] SameTenants = { "tenant", "tenant" };
         private static readonly string[] DiffetentTenants = { "tenant", "differentTenant" };
         private static readonly string[] DefaultTenant = { Tenancy.DefaultTenantId };
+
+        public end_to_end_event_capture_and_fetching_the_stream_Tests() : base("projections")
+        {
+        }
 
         public static TheoryData<DocumentTracking, TenancyStyle, string[]> SessionParams = new TheoryData<DocumentTracking, TenancyStyle, string[]>
         {
@@ -35,7 +41,7 @@ namespace Marten.Testing.Events
         };
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void capture_events_to_a_new_stream_and_fetch_the_events_back(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -66,7 +72,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public Task capture_events_to_a_new_stream_and_fetch_the_events_back_async(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -97,7 +103,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public Task capture_events_to_a_new_stream_and_fetch_the_events_back_async_with_linq(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -129,7 +135,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void capture_events_to_a_new_stream_and_fetch_the_events_back_sync_with_linq(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -161,7 +167,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void live_aggregate_equals_inlined_aggregate_without_hidden_contracts(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -192,7 +198,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void open_persisted_stream_in_new_store_with_same_settings(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -217,7 +223,7 @@ namespace Marten.Testing.Events
                     var party = session.Events.AggregateStream<QuestParty>(questId);
 
                     party.Id.ShouldBe(questId);
-                    party.ShouldNotBeNull();
+                    SpecificationExtensions.ShouldNotBeNull(party);
 
                     var party_at_version_3 = session.Events
                         .AggregateStream<QuestParty>(questId, 3);
@@ -226,7 +232,7 @@ namespace Marten.Testing.Events
 
                     var party_yesterday = session.Events
                         .AggregateStream<QuestParty>(questId, timestamp: DateTime.UtcNow.AddDays(-1));
-                    party_yesterday.ShouldNotBeNull();
+                    SpecificationExtensions.ShouldNotBeNull(party_yesterday);
                 }
 
                 using (var session = store.OpenSession(tenantId, sessionType))
@@ -241,7 +247,7 @@ namespace Marten.Testing.Events
                 using (var session = store.OpenSession(tenantId, sessionType))
                 {
                     var party = session.Load<QuestParty>(questId);
-                    party.ShouldNotBeNull();
+                    SpecificationExtensions.ShouldNotBeNull(party);
                 }
                 //GetAll
                 using (var session = store.OpenSession(tenantId, sessionType))
@@ -249,7 +255,7 @@ namespace Marten.Testing.Events
                     var parties = session.Events.QueryRawEventDataOnly<QuestParty>().ToArray();
                     foreach (var party in parties)
                     {
-                        party.ShouldNotBeNull();
+                        SpecificationExtensions.ShouldNotBeNull(party);
                     }
                 }
                 //This AggregateStream fail with NPE
@@ -273,7 +279,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void query_before_saving(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -305,7 +311,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public Task aggregate_stream_async_has_the_id(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -337,7 +343,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void capture_events_to_a_new_stream_and_fetch_the_events_back_with_stream_id_provided(
             DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
@@ -368,7 +374,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void capture_events_to_a_non_existing_stream_and_fetch_the_events_back(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -398,7 +404,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void capture_events_to_an_existing_stream_and_fetch_the_events_back(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -441,7 +447,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void capture_events_to_a_new_stream_and_fetch_the_events_back_in_another_database_schema(
             DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
@@ -469,7 +475,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void
             capture_events_to_a_new_stream_and_fetch_the_events_back_with_stream_id_provided_in_another_database_schema(
             DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
@@ -495,13 +501,13 @@ namespace Marten.Testing.Events
                     streamEvents.ElementAt(1).Data.ShouldBeOfType<MembersDeparted>();
                     streamEvents.ElementAt(1).Version.ShouldBe(2);
 
-                    streamEvents.Each(x => x.Sequence.ShouldBeGreaterThan(0L));
+                    streamEvents.Each(x => SpecificationExtensions.ShouldBeGreaterThan(x.Sequence, 0L));
                 }
             }).ShouldSucceed();
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void capture_events_to_a_non_existing_stream_and_fetch_the_events_back_in_another_database_schema(
             DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
@@ -532,7 +538,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void capture_events_to_an_existing_stream_and_fetch_the_events_back_in_another_database_schema(
             DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
@@ -577,7 +583,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void assert_on_max_event_id_on_event_stream_append(
             DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
@@ -611,7 +617,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionParams")]
+        [MemberData(nameof(SessionParams))]
         public void capture_immutable_events(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
         {
             var store = InitStore(tenancyStyle);
@@ -643,14 +649,48 @@ namespace Marten.Testing.Events
             );
         }
 
-        private static DocumentStore InitStore(TenancyStyle tenancyStyle, bool cleanShema = true)
+        [Theory]
+        [MemberData(nameof(SessionParams))]
+        public void capture_immutable_events_with_for_update_lock(DocumentTracking sessionType, TenancyStyle tenancyStyle, string[] tenants)
+        {
+            var store = InitStore(tenancyStyle, useAppendEventForUpdateLock: true);
+
+            var id = Guid.NewGuid();
+
+            When.CalledForEach(tenants, (tenantId, index) =>
+            {
+                var immutableEvent = new ImmutableEvent(id, "some-name");
+
+                using (var session = store.OpenSession(tenantId, sessionType))
+                {
+                    session.Events.Append(id, immutableEvent);
+                    session.SaveChanges();
+                }
+
+                using (var session = store.OpenSession(tenantId, sessionType))
+                {
+                    var streamEvents = session.Events.FetchStream(id);
+
+                    streamEvents.Count.ShouldBe(1);
+                    var @event = streamEvents.ElementAt(0).Data.ShouldBeOfType<ImmutableEvent>();
+
+                    @event.Id.ShouldBe(id);
+                    @event.Name.ShouldBe("some-name");
+                }
+            }).ShouldThrowIf(
+                (tenancyStyle == TenancyStyle.Single && tenants.Length > 1) || (tenancyStyle == TenancyStyle.Conjoined && tenants.SequenceEqual(SameTenants))
+            );
+        }
+
+        private DocumentStore InitStore(TenancyStyle tenancyStyle, bool cleanSchema = true, bool useAppendEventForUpdateLock = false)
         {
             var databaseSchema = $"end_to_end_event_capture_{tenancyStyle.ToString().ToLower()}";
 
-            var store = DocumentStore.For(_ =>
+            var store = StoreOptions(_ =>
             {
                 _.Events.DatabaseSchemaName = databaseSchema;
                 _.Events.TenancyStyle = tenancyStyle;
+                _.Events.UseAppendEventForUpdateLock = useAppendEventForUpdateLock;
 
                 _.AutoCreateSchemaObjects = AutoCreate.All;
 
@@ -664,12 +704,8 @@ namespace Marten.Testing.Events
                 _.Events.AddEventType(typeof(MembersJoined));
                 _.Events.AddEventType(typeof(MembersDeparted));
                 _.Events.AddEventType(typeof(QuestStarted));
-            });
+            }, cleanSchema);
 
-            if (cleanShema)
-            {
-                store.Advanced.Clean.CompletelyRemoveAll();
-            }
 
             return store;
         }

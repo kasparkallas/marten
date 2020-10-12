@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Baseline;
@@ -6,12 +6,13 @@ using Marten.Events;
 using Marten.Events.Projections;
 using Marten.Services;
 using Marten.Storage;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events.Projections
 {
-    public class inline_transformation_of_events : DocumentSessionFixture<NulloIdentityMap>
+    public class inline_transformation_of_events: IntegrationContext
     {
         private QuestStarted started = new QuestStarted { Name = "Find the Orb" };
         private MembersJoined joined = new MembersJoined { Day = 2, Location = "Faldor's Farm", Members = new string[] { "Garion", "Polgara", "Belgarath" } };
@@ -80,6 +81,7 @@ namespace Marten.Testing.Events.Projections
             var store = DocumentStore.For(_ =>
             {
                 _.Connection(ConnectionSource.ConnectionString);
+                _.DatabaseSchemaName = "monster_defeated";
 
                 _.Events.InlineProjections.TransformEvents(new MonsterDefeatedTransform());
             });
@@ -108,10 +110,14 @@ namespace Marten.Testing.Events.Projections
                 doc.Monster.ShouldBe(e.Data.Name);
             }
         }
+
+        public inline_transformation_of_events(DefaultStoreFixture fixture) : base(fixture)
+        {
+        }
     }
 
     // SAMPLE: MonsterDefeatedTransform
-    public class MonsterDefeatedTransform : ITransform<MonsterSlayed, MonsterDefeated>
+    public class MonsterDefeatedTransform: ITransform<MonsterSlayed, MonsterDefeated>
     {
         public MonsterDefeated Transform(EventStream stream, Event<MonsterSlayed> input)
         {

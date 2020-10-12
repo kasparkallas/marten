@@ -1,43 +1,28 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Marten.Linq;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Marten.Transforms;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Acceptance
 {
-    public class select_with_transformation : IntegratedFixture
+    public class select_with_transformation: IntegrationContext
     {
-        public select_with_transformation()
+        public select_with_transformation(DefaultStoreFixture fixture) : base(fixture)
         {
             StoreOptions(_ => _.Transforms.LoadFile("get_fullname.js"));
         }
 
-        public void load_transformation()
-        {
-    var store = DocumentStore.For(_ =>
-    {
-        _.Connection(ConnectionSource.ConnectionString);
-
-        // Let Marten derive the transform name
-        // from the file name
-        _.Transforms.LoadFile("get_fullname.js");
-
-        // or override the transform name
-        _.Transforms.LoadFile("get_fullname.js", "fullname");
-    });
-
-            store.Dispose();
-        }
 
         // SAMPLE: transform_to_json_in_compiled_query
-        public class JsonQuery : ICompiledQuery<User, string>
+        public class JsonQuery: ICompiledQuery<User, string>
         {
-            public Expression<Func<IQueryable<User>, string>> QueryIs()
+            public Expression<Func<IMartenQueryable<User>, string>> QueryIs()
             {
                 return _ => _.Where(x => x.FirstName == FirstName)
                 .TransformToJson("get_fullname").Single();
@@ -45,6 +30,7 @@ namespace Marten.Testing.Acceptance
 
             public string FirstName { get; set; }
         }
+
         // ENDSAMPLE
 
         [Fact]
@@ -57,14 +43,13 @@ namespace Marten.Testing.Acceptance
                 session.Store(user);
                 session.SaveChanges();
 
-                var json = session.Query(new JsonQuery {FirstName = "Eric"});
+                var json = session.Query(new JsonQuery { FirstName = "Eric" });
 
                 json.ShouldBe("{\"fullname\": \"Eric Berry\"}");
             }
         }
 
         // SAMPLE: using_transform_to_json
-
 
         [Fact]
         public void can_select_a_string_field_in_compiled_query()
@@ -83,24 +68,24 @@ namespace Marten.Testing.Acceptance
             }
         }
 
-
         [Fact]
-    public void can_transform_to_json()
-    {
-        var user = new User {FirstName = "Eric", LastName = "Berry"};
-
-        using (var session = theStore.OpenSession())
+        public void can_transform_to_json()
         {
-            session.Store(user);
-            session.SaveChanges();
+            var user = new User { FirstName = "Eric", LastName = "Berry" };
 
-            var json = session.Query<User>()
-                .Where(x => x.Id == user.Id)
-                .TransformToJson("get_fullname").Single();
+            using (var session = theStore.OpenSession())
+            {
+                session.Store(user);
+                session.SaveChanges();
 
-            json.ShouldBe("{\"fullname\": \"Eric Berry\"}");
+                var json = session.Query<User>()
+                    .Where(x => x.Id == user.Id)
+                    .TransformToJson("get_fullname").Single();
+
+                json.ShouldBe("{\"fullname\": \"Eric Berry\"}");
+            }
         }
-    }
+
         // ENDSAMPLE
 
         [Fact]
@@ -144,6 +129,7 @@ namespace Marten.Testing.Acceptance
                 view.fullname.ShouldBe("Eric Berry");
             }
         }
+
         // ENDSAMPLE
 
         [Fact]
@@ -164,9 +150,9 @@ namespace Marten.Testing.Acceptance
             }
         }
 
-        public class FullNameViewQuery : ICompiledQuery<User, FullNameView>
+        public class FullNameViewQuery: ICompiledQuery<User, FullNameView>
         {
-            public Expression<Func<IQueryable<User>, FullNameView>> QueryIs()
+            public Expression<Func<IMartenQueryable<User>, FullNameView>> QueryIs()
             {
                 return _ => _.Where(x => x.FirstName == FirstName).TransformTo<FullNameView>("get_fullname").Single();
             }
@@ -189,6 +175,5 @@ namespace Marten.Testing.Acceptance
                 view.fullname.ShouldBe("Eric Berry");
             }
         }
-
     }
 }

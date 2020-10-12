@@ -1,11 +1,12 @@
-﻿using System;
+using System;
 using System.Threading.Tasks;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events
 {
-    public class Bug_705_FetchStreamState_before_AggregateStream : IntegratedFixture
+    public class Bug_705_FetchStreamState_before_AggregateStream: BugIntegrationContext
     {
         [Fact]
         public async Task call_fetch_stream_state_on_new_stream()
@@ -21,7 +22,7 @@ namespace Marten.Testing.Events
                 await session.SaveChangesAsync();
             }
 
-            using (var store2 = DocumentStore.For(ConnectionSource.ConnectionString))
+            using (var store2 = SeparateStore())
             {
                 using (var session = store2.OpenSession())
                 {
@@ -29,8 +30,7 @@ namespace Marten.Testing.Events
                     state.Version.ShouldBe(2);
                 }
             }
-
-
         }
+
     }
 }

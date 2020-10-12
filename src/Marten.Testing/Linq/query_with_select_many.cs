@@ -1,19 +1,22 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Baseline;
 using Marten.Linq;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Marten.Transforms;
 using Shouldly;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Marten.Testing.Linq
 {
-    public class query_with_select_many : IntegratedFixture
+    public class query_with_select_many : IntegrationContext
     {
+        private readonly ITestOutputHelper _output;
+
         // SAMPLE: can_do_simple_select_many_against_simple_array
         [Fact]
         public void can_do_simple_select_many_against_simple_array()
@@ -40,6 +43,57 @@ namespace Marten.Testing.Linq
             }
         }
         // ENDSAMPLE
+
+        [Fact]
+        public void distinct_and_count()
+        {
+            var product1 = new ProductWithList { Tags = new List<string> { "a", "b", "c" } };
+            var product2 = new ProductWithList { Tags = new List<string> { "b", "c", "d" } };
+            var product3 = new ProductWithList { Tags = new List<string> { "d", "e", "f" } };
+
+            using (var session = theStore.OpenSession())
+            {
+                session.Store(product1, product2, product3);
+                session.SaveChanges();
+            }
+
+            using (var query = theStore.QuerySession())
+            {
+                query
+                    .Query<ProductWithList>()
+                    .SelectMany(x => x.Tags)
+                    .Distinct()
+                    .Count()
+                    .ShouldBe(6);
+
+            }
+        }
+
+        [Fact]
+        public void distinct_and_count_long()
+        {
+            var product1 = new ProductWithList { Tags = new List<string> { "a", "b", "c" } };
+            var product2 = new ProductWithList { Tags = new List<string> { "b", "c", "d" } };
+            var product3 = new ProductWithList { Tags = new List<string> { "d", "e", "f" } };
+
+            using (var session = theStore.OpenSession())
+            {
+                session.Store(product1, product2, product3);
+                session.SaveChanges();
+            }
+
+            using (var query = theStore.QuerySession())
+            {
+                query
+                    .Query<ProductWithList>()
+                    .SelectMany(x => x.Tags)
+                    .Distinct()
+                    .LongCount()
+                    .ShouldBe(6L);
+
+            }
+        }
+
 
         [Fact]
         public void can_do_simple_select_many_against_generic_list()
@@ -105,7 +159,7 @@ namespace Marten.Testing.Linq
                     .Where(p => p.Tags.Length == 1)
                     .SelectMany(x => x.Tags);
                 var ex = Record.Exception(() => queryable.Count());
-                ex.ShouldBeNull();
+                SpecificationExtensions.ShouldBeNull(ex);
             }
         }
 
@@ -148,7 +202,7 @@ namespace Marten.Testing.Linq
                     .Where(p => p.Tags.Length == 1)
                     .SelectMany(x => x.Tags);
                 var ex = await Record.ExceptionAsync(() => queryable.CountAsync());
-                ex.ShouldBeNull();
+                SpecificationExtensions.ShouldBeNull(ex);
             }
         }
 
@@ -158,7 +212,7 @@ namespace Marten.Testing.Linq
             var targets = Target.GenerateRandomData(10).ToArray();
             var expectedCount = targets.SelectMany(x => x.Children).Count();
 
-            expectedCount.ShouldBeGreaterThan(0);
+            SpecificationExtensions.ShouldBeGreaterThan(expectedCount, 0);
 
 
             using (var session = theStore.OpenSession())
@@ -256,6 +310,8 @@ namespace Marten.Testing.Linq
         [Fact]
         public async Task select_many_with_any_async()
         {
+            theStore.Advanced.Clean.DeleteDocumentsFor(typeof(Target));
+
             var product1 = new Product {Tags = new[] {"a", "b", "c"}};
             var product2 = new Product {Tags = new[] {"b", "c", "d"}};
             var product3 = new Product {Tags = new[] {"d", "e", "f"}};
@@ -421,7 +477,7 @@ namespace Marten.Testing.Linq
 
             }
         }
-        
+
         [Fact]
         public async Task select_many_with_includes_async()
         {
@@ -490,6 +546,9 @@ namespace Marten.Testing.Linq
                 actual.Each(x => x.Shade.ShouldBe(Colors.Green));
             }
         }
+
+
+
 
 
         [Fact]
@@ -561,6 +620,103 @@ namespace Marten.Testing.Linq
                     .Select(x => x.Attribute.Name).Distinct();
 
             }
+        }
+
+        [Fact]
+        public void try_n_deep_smoke_test()
+        {
+            using var query = theStore.QuerySession();
+
+            var command = query.Query<Target>()
+                .Where(x => x.Color == Colors.Blue)
+                .SelectMany(x => x.Children)
+                .Where(x => x.Color == Colors.Red)
+                .SelectMany(x => x.Children)
+                .OrderBy(x => x.Number)
+                .ToCommand();
+
+            command.ShouldNotBeNull();
+
+            _output.WriteLine(command.CommandText);
+
+            query.Query<Target>()
+                .Where(x => x.Color == Colors.Blue)
+                .SelectMany(x => x.Children)
+                .Where(x => x.Color == Colors.Red)
+                .SelectMany(x => x.Children)
+                .OrderBy(x => x.Number)
+                .ToList().ShouldNotBeNull();
+        }
+
+        public class TargetGroup
+        {
+            public Guid Id { get; set; }
+            public Target[] Targets { get; set; }
+        }
+
+        [Fact]
+        public void select_many_2_deep()
+        {
+            var group1 = new TargetGroup
+            {
+                Targets = Target.GenerateRandomData(25).ToArray()
+            };
+
+            var group2 = new TargetGroup
+            {
+                Targets = Target.GenerateRandomData(25).ToArray()
+            };
+
+            var group3 = new TargetGroup
+            {
+                Targets = Target.GenerateRandomData(25).ToArray()
+            };
+
+            var groups = new[] {group1, group2, group3};
+
+            using (var session = theStore.LightweightSession())
+            {
+                session.Store(groups);
+                session.SaveChanges();
+            }
+
+            using var query = theStore.QuerySession();
+
+            var loaded = query.Query<TargetGroup>()
+                .SelectMany(x => x.Targets).Where(x => x.Color == Colors.Blue)
+                .SelectMany(x => x.Children).OrderBy(x => x.Number).ToArray().Select(x => x.Id).ToArray();
+
+            var expected = groups.SelectMany(x => x.Targets).Where(x => x.Color == Colors.Blue)
+                .SelectMany(x => x.Children).OrderBy(x => x.Number).ToArray().Select(x => x.Id).ToArray();
+
+            loaded.ShouldBe(expected);
+        }
+
+        [Fact]
+        public async Task can_query_with_where_clause_and_count_after_the_select_many()
+        {
+            var targets = Target.GenerateRandomData(1000).ToArray();
+            theStore.BulkInsert(targets);
+
+            using var query = theStore.QuerySession();
+
+            var actual = await query.Query<Target>()
+                .Where(x => x.Color == Colors.Blue)
+                .SelectMany(x => x.Children)
+                .CountAsync(x => x.Color == Colors.Red);
+
+            var expected = targets.Where(x => x.Color == Colors.Blue)
+                .SelectMany(x => x.Children)
+                .Count(x => x.Color == Colors.Red);
+
+            actual.ShouldBe(expected);
+        }
+
+
+
+        public query_with_select_many(DefaultStoreFixture fixture, ITestOutputHelper output) : base(fixture)
+        {
+            _output = output;
         }
     }
 

@@ -3,17 +3,20 @@ using System.IO;
 using System.Linq;
 using Baseline;
 using Marten.Schema;
+using Marten.Services;
 using Marten.Storage;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Marten.Transforms;
 using Marten.Util;
+using Npgsql;
 using NSubstitute;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Transforms
 {
-    public class TransformFunctionTests
+    public class TransformFunctionTests : IntegrationContext
     {
         private readonly string _getFullnameJs = AppContext.BaseDirectory.AppendPath("get_fullname.js");
 
@@ -60,7 +63,7 @@ namespace Marten.Testing.Transforms
 
             func.Name.ShouldBe("get_fullname");
 
-            func.Body.ShouldContain("module.exports");
+            SpecificationExtensions.ShouldContain(func.Body, "module.exports");
 
             func.Identifier.Name.ShouldBe("mt_transform_get_fullname");
         }
@@ -68,31 +71,27 @@ namespace Marten.Testing.Transforms
         [Fact]
         public void end_to_end_test_using_the_transform()
         {
-            using (var store = TestingDocumentStore.Basic())
+            var user = new User {FirstName = "Jeremy", LastName = "Miller"};
+            var json = new TestsSerializer().ToCleanJson(user);
+
+            var func = TransformFunction.ForFile(new StoreOptions(), _getFullnameJs);
+
+            using (var conn = theStore.Tenancy.Default.OpenConnection())
             {
-                var user = new User {FirstName = "Jeremy", LastName = "Miller"};
-                var json = new TestsSerializer().ToCleanJson(user);
+                var cmd = new NpgsqlCommand(func.GenerateFunction());
+                conn.Execute(cmd);
 
-                var func = TransformFunction.ForFile(new StoreOptions(), _getFullnameJs);
+                var cmd2 = new NpgsqlCommand("select mt_transform_get_fullname(:json)").WithJsonParameter("json", json);
+                var actual = conn.QueryScalar<string>(cmd2);
 
-                using (var conn = store.Tenancy.Default.OpenConnection())
-                {
-                    conn.Execute(cmd => cmd.Sql(func.GenerateFunction()).ExecuteNonQuery());
-
-                    var actual = conn.Execute(cmd =>
-                    {
-                        return cmd.Sql("select mt_transform_get_fullname(:json)")
-                            .WithJsonParameter("json", json).ExecuteScalar().As<string>();
-                    });
-
-                    actual.ShouldBe("{\"fullname\": \"Jeremy Miller\"}");
-                }
-
-                
+                actual.ShouldBe("{\"fullname\": \"Jeremy Miller\"}");
             }
         }
 
 
+        public TransformFunctionTests(DefaultStoreFixture fixture) : base(fixture)
+        {
+        }
     }
 
 

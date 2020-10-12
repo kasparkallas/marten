@@ -1,17 +1,18 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Baseline;
-using Marten.Schema;
+using Marten.Exceptions;
 using Marten.Services;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Acceptance
 {
-    public class optimistic_concurrency_with_subclass_hierarchies : IntegratedFixture
+    public class optimistic_concurrency_with_subclass_hierarchies: IntegrationContext
     {
-        public optimistic_concurrency_with_subclass_hierarchies()
+        public optimistic_concurrency_with_subclass_hierarchies(DefaultStoreFixture fixture) : base(fixture)
         {
             StoreOptions(_ =>
             {
@@ -28,7 +29,7 @@ namespace Marten.Testing.Acceptance
                 session.Store(coffeeShop);
                 session.SaveChanges();
 
-                session.Load<CoffeeShop>(coffeeShop.Id).ShouldNotBeNull();
+                SpecificationExtensions.ShouldNotBeNull(session.Load<CoffeeShop>(coffeeShop.Id));
             }
         }
 
@@ -41,10 +42,9 @@ namespace Marten.Testing.Acceptance
                 session.Store(coffeeShop);
                 await session.SaveChangesAsync().ConfigureAwait(false);
 
-                (await session.LoadAsync<CoffeeShop>(coffeeShop.Id).ConfigureAwait(false)).ShouldNotBeNull();
+                SpecificationExtensions.ShouldNotBeNull((await session.LoadAsync<CoffeeShop>(coffeeShop.Id).ConfigureAwait(false)));
             }
         }
-
 
         [Fact]
         public void can_update_with_optimistic_concurrency()
@@ -69,8 +69,6 @@ namespace Marten.Testing.Acceptance
             {
                 session.Load<CoffeeShop>(doc1.Id).Name.ShouldBe("Mozart's");
             }
-
-
         }
 
         [Fact]
@@ -98,8 +96,6 @@ namespace Marten.Testing.Acceptance
             }
         }
 
-
-
         [Fact]
         public void update_with_stale_version()
         {
@@ -124,14 +120,13 @@ namespace Marten.Testing.Acceptance
                 // Should go through just fine
                 session2.SaveChanges();
 
-
-                var ex = Exception<AggregateException>.ShouldBeThrownBy(() =>
+                var ex = Exception<ConcurrencyException>.ShouldBeThrownBy(() =>
                 {
                     session1.SaveChanges();
                 });
 
-                var concurrency = ex.InnerExceptions.OfType<ConcurrencyException>().Single();
-                concurrency.Message.ShouldBe($"Optimistic concurrency check failed for {typeof(Shop).FullName} #{doc1.Id}");
+
+                ex.Message.ShouldBe($"Optimistic concurrency check failed for {typeof(Shop).FullName} #{doc1.Id}");
             }
             finally
             {
@@ -143,7 +138,6 @@ namespace Marten.Testing.Acceptance
             {
                 query.Load<CoffeeShop>(doc1.Id).Name.ShouldBe("Dominican Joe's");
             }
-
         }
 
         [Fact]
@@ -170,14 +164,12 @@ namespace Marten.Testing.Acceptance
                 // Should go through just fine
                 await session2.SaveChangesAsync().ConfigureAwait(false);
 
-
-                var ex = await Exception<AggregateException>.ShouldBeThrownByAsync(async () =>
+                var ex = await Exception<ConcurrencyException>.ShouldBeThrownByAsync(async () =>
                 {
                     await session1.SaveChangesAsync().ConfigureAwait(false);
                 });
 
-                var concurrency = ex.InnerExceptions.OfType<ConcurrencyException>().Single();
-                concurrency.Message.ShouldBe($"Optimistic concurrency check failed for {typeof(Shop).FullName} #{doc1.Id}");
+                ex.Message.ShouldBe($"Optimistic concurrency check failed for {typeof(Shop).FullName} #{doc1.Id}");
             }
             finally
             {
@@ -189,7 +181,6 @@ namespace Marten.Testing.Acceptance
             {
                 (await query.LoadAsync<CoffeeShop>(doc1.Id)).Name.ShouldBe("Dominican Joe's");
             }
-
         }
     }
 }

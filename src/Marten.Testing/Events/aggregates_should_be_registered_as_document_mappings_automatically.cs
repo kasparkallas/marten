@@ -1,12 +1,13 @@
-﻿using System.Linq;
+using System.Linq;
 using Marten.Events.Projections;
 using Marten.Testing.Events.Projections;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events
 {
-    public class aggregates_should_be_registered_as_document_mappings_automatically : IntegratedFixture
+    public class aggregates_should_be_registered_as_document_mappings_automatically: IntegrationContext
     {
         [Fact]
         public void aggregations_are_registered()
@@ -16,7 +17,7 @@ namespace Marten.Testing.Events
                 _.Events.AggregateFor<QuestParty>();
             });
 
-            theStore.Storage.AllMappings.Select(x => x.DocumentType)
+            theStore.Storage.AllDocumentMappings.Select(x => x.DocumentType)
                 .ShouldContain(typeof(QuestParty));
         }
 
@@ -28,7 +29,7 @@ namespace Marten.Testing.Events
                 _.Events.AddAggregator(new Aggregator<QuestParty>());
             });
 
-            theStore.Storage.AllMappings.Select(x => x.DocumentType)
+            theStore.Storage.AllDocumentMappings.Select(x => x.DocumentType)
                 .ShouldContain(typeof(QuestParty));
         }
 
@@ -40,7 +41,7 @@ namespace Marten.Testing.Events
                 _.Events.InlineProjections.AggregateStreamsWith<QuestParty>();
             });
 
-            theStore.Storage.AllMappings.Select(x => x.DocumentType)
+            theStore.Storage.AllDocumentMappings.Select(x => x.DocumentType)
                 .ShouldContain(typeof(QuestParty));
         }
 
@@ -52,7 +53,7 @@ namespace Marten.Testing.Events
                 _.Events.AsyncProjections.AggregateStreamsWith<QuestParty>();
             });
 
-            theStore.Storage.AllMappings.Select(x => x.DocumentType)
+            theStore.Storage.AllDocumentMappings.Select(x => x.DocumentType)
                 .ShouldContain(typeof(QuestParty));
         }
 
@@ -64,9 +65,8 @@ namespace Marten.Testing.Events
                 _.Events.InlineProjections.TransformEvents(new MonsterDefeatedTransform());
             });
 
-            theStore.Storage.AllMappings.Select(x => x.DocumentType)
+            theStore.Storage.AllDocumentMappings.Select(x => x.DocumentType)
                 .ShouldContain(typeof(MonsterDefeated));
-
         }
 
         [Fact]
@@ -77,9 +77,12 @@ namespace Marten.Testing.Events
                 _.Events.AsyncProjections.TransformEvents(new MonsterDefeatedTransform());
             });
 
-            theStore.Storage.AllMappings.Select(x => x.DocumentType)
+            theStore.Storage.AllDocumentMappings.Select(x => x.DocumentType)
                 .ShouldContain(typeof(MonsterDefeated));
+        }
 
+        public aggregates_should_be_registered_as_document_mappings_automatically(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

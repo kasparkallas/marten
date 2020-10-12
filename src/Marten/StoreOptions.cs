@@ -1,14 +1,20 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using Baseline;
 using Marten.Events;
+using Marten.Exceptions;
+using Marten.Internal;
+using Marten.Internal.CompiledQueries;
+using Marten.Linq;
+using Marten.Linq.Fields;
 using Marten.Schema;
 using Marten.Schema.Identity;
 using Marten.Schema.Identity.Sequences;
 using Marten.Services;
 using Marten.Storage;
 using Marten.Transforms;
+using Marten.Util;
 using Npgsql;
 
 namespace Marten
@@ -68,12 +74,16 @@ namespace Marten
 
         public Action<IDatabaseCreationExpressions> CreateDatabases { get; set; }
 
+        public IProviderGraph Providers { get; }
+
         public StoreOptions()
         {
             Events = new EventGraph(this);
-            Schema = new MartenRegistry();
+            Schema = new MartenRegistry(this);
             Transforms = new Transforms.Transforms(this);
             Storage = new StorageFeatures(this);
+
+            Providers = new ProviderGraph(this);
         }
 
         /// <summary>
@@ -116,7 +126,7 @@ namespace Marten
         /// <summary>
         ///     Extension point to add custom Linq query parsers
         /// </summary>
-        public LinqCustomizations Linq { get; } = new LinqCustomizations();
+        public LinqParsing Linq { get; } = new LinqParsing();
 
         public ITransforms Transforms { get; }
 
@@ -140,13 +150,25 @@ namespace Marten
         public EnumStorage EnumStorage => Serializer().EnumStorage;
 
         /// <summary>
-        ///     Sets Enum values stored as either integers or strings for DuplicatedField
+        ///     Sets Enum values stored as either integers or strings for DuplicatedField.
+        ///     Please use only for migration from Marten 2.*. It might be removed in the next major version.
         /// </summary>
+        [Obsolete("Please use only for migration from Marten 2.*. It might be removed in the next major version.")]
         public EnumStorage DuplicatedFieldEnumStorage
         {
             get { return _duplicatedFieldEnumStorage ?? EnumStorage; }
-            set { _duplicatedFieldEnumStorage = value; }
+            set
+            {
+                _duplicatedFieldEnumStorage = value;
+            }
         }
+
+        /// <summary>
+        ///     Decides if `timestamp without time zone` database type should be used for `DateTime` DuplicatedField.
+        ///     Please use only for migration from Marten 2.*. It might be removed in the next major version.
+        /// </summary>
+        [Obsolete("Please use only for migration from Marten 2.*. It might be removed in the next major versions")]
+        public bool DuplicatedFieldUseTimestampWithoutTimeZoneForDateTime { get; set; } = true;
 
         internal void CreatePatching()
         {
@@ -207,11 +229,25 @@ namespace Marten
         ///     Use the default serialization (ilmerged Newtonsoft.Json) with Enum values
         ///     stored as either integers or strings
         /// </summary>
-        /// <param name="enumStyle"></param>
+        /// <param name="enumStorage"></param>
         /// <param name="casing">Casing style to be used in serialization</param>
-        public void UseDefaultSerialization(EnumStorage enumStyle = EnumStorage.AsInteger, Casing casing = Casing.Default)
+        /// <param name="collectionStorage">Allow to set collection storage as raw arrays (without explicit types)</param>
+        /// <param name="nonPublicMembersStorage">Allow non public members to be used during deserialization</param>
+        public void UseDefaultSerialization(
+            EnumStorage enumStorage = EnumStorage.AsInteger,
+            Casing casing = Casing.Default,
+            CollectionStorage collectionStorage = CollectionStorage.Default,
+            NonPublicMembersStorage nonPublicMembersStorage = NonPublicMembersStorage.Default
+        )
         {
-            Serializer(new JsonNetSerializer { EnumStorage = enumStyle, Casing = casing });
+            Serializer(
+                new JsonNetSerializer
+                {
+                    EnumStorage = enumStorage,
+                    Casing = casing,
+                    CollectionStorage = collectionStorage,
+                    NonPublicMembersStorage = nonPublicMembersStorage
+                });
         }
 
         /// <summary>
@@ -263,8 +299,7 @@ namespace Marten
         /// <param name="documentType"></param>
         public void RegisterDocumentType(Type documentType)
         {
-            if (Storage.MappingFor(documentType) == null)
-                throw new Exception("Unable to create document mapping for " + documentType);
+            Storage.RegisterDocumentType(documentType);
         }
 
         /// <summary>
@@ -282,19 +317,20 @@ namespace Marten
                 throw new PostgresqlIdentifierInvalidException(name);
             if (name.IndexOf(' ') >= 0)
                 throw new PostgresqlIdentifierInvalidException(name);
-            if (name.Length < NameDataLength) return;
+            if (name.Length < NameDataLength)
+                return;
             throw new PostgresqlIdentifierTooLongException(NameDataLength, name);
         }
 
         internal void ApplyConfiguration()
         {
-            Schema.Apply(this);
+            Storage.BuildAllMappings();
 
             foreach (var mapping in Storage.AllDocumentMappings)
             {
                 mapping.Validate();
             }
-		}
+        }
 
         public ITenancy Tenancy { get; set; }
 
@@ -325,6 +361,34 @@ namespace Marten
         public PoliciesExpression Policies => new PoliciesExpression(this);
 
         public bool PLV8Enabled { get; set; } = true;
+        public IList<IFieldSource> FieldSources { get; } = new List<IFieldSource>();
+
+        /// <summary>
+        /// Option to enable or disable usage of default tenant when using multi-tenanted documents
+        /// </summary>
+        public bool DefaultTenantUsageEnabled { get; set; } = true;
+
+        private ImHashMap<Type, IFieldMapping> _childFieldMappings = ImHashMap<Type, IFieldMapping>.Empty;
+
+        /// <summary>
+        /// These mappings should only be used for Linq querying within the SelectMany() body
+        /// </summary>
+        /// <param name="type"></param>
+        /// <returns></returns>
+        internal IFieldMapping ChildTypeMappingFor(Type type)
+        {
+            if (_childFieldMappings.TryFind(type, out var mapping))
+            {
+                return mapping;
+            }
+
+            mapping = new FieldMapping("d.data", type, this);
+
+            _childFieldMappings = _childFieldMappings.AddOrUpdate(type, mapping);
+
+            return mapping;
+
+        }
 
         public class PoliciesExpression
         {
@@ -356,6 +420,22 @@ namespace Marten
                 return ForAllDocuments(_ => _.TenancyStyle = TenancyStyle.Conjoined);
             }
         }
+
+        private ImHashMap<Type, ICompiledQuerySource> _querySources = ImHashMap<Type, ICompiledQuerySource>.Empty;
+
+        internal ICompiledQuerySource GetCompiledQuerySourceFor<TDoc, TOut>(ICompiledQuery<TDoc,TOut> query, IMartenSession session)
+        {
+            if (_querySources.TryFind(query.GetType(), out var source))
+            {
+                return source;
+            }
+
+            var plan = QueryCompiler.BuildPlan(session, query, this);
+            source = new CompiledQuerySourceBuilder(plan, this).Build();
+            _querySources = _querySources.AddOrUpdate(query.GetType(), source);
+
+            return source;
+        }
     }
 
     public interface IDocumentPolicy
@@ -363,7 +443,7 @@ namespace Marten
         void Apply(DocumentMapping mapping);
     }
 
-    internal class LambdaDocumentPolicy : IDocumentPolicy
+    internal class LambdaDocumentPolicy: IDocumentPolicy
     {
         private readonly Action<DocumentMapping> _modify;
 

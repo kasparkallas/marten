@@ -1,32 +1,36 @@
 using System;
+using System.Collections.Generic;
+using Marten.Internal.Sessions;
+using Marten.Internal.Storage;
+using Marten.Linq.Filters;
 using Marten.Patching;
 using Marten.Schema;
 using Marten.Services;
 using Marten.Storage;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using NSubstitute;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Patching
 {
-    public class PatchExpressionTests
+    public class PatchExpressionTests : IntegrationContext
     {
         private readonly PatchExpression<Target> _expression;
         private readonly ITenant _schema = Substitute.For<ITenant>();
-        
 
-        public PatchExpressionTests()
+
+        public PatchExpressionTests(DefaultStoreFixture fixture) : base(fixture)
         {
-            var queryable = Substitute.For<IQueryableDocument>();
-            queryable.DocumentType.Returns(typeof(Target));
+            var storage = Substitute.For<IDocumentStorage>();
+            storage.DocumentType.Returns(typeof(Target));
 
-            var mapping = Substitute.For<IDocumentMapping>();
-            mapping.ToQueryableDocument().Returns(queryable);
+            var session = theStore.LightweightSession();
 
-            _schema.MappingFor(typeof(Target)).Returns(mapping);
+            Disposables.Add(session);
 
-            var store = TestingDocumentStore.Basic();
-            _expression = new PatchExpression<Target>(null, _schema, new UnitOfWork(store, store.Tenancy.Default), new JsonNetSerializer());
+            _expression = new PatchExpression<Target>(new ByGuidFilter(Guid.NewGuid()), (DocumentSessionBase)session);
         }
 
         [Fact]
@@ -397,8 +401,125 @@ namespace Marten.Testing.Patching
         [Fact]
         public void duplicate_property_no_target()
         {
-            Assert.Throws<ArgumentException>(() => _expression.Duplicate(x => x.String))
-                .Message.ShouldContain("At least one destination must be given");
+            SpecificationExtensions.ShouldContain(Assert.Throws<ArgumentException>(() => _expression.Duplicate(x => x.String))
+                    .Message, "At least one destination must be given");
+        }
+
+        [Fact]
+        public void check_camel_case_serialized_property()
+        {
+            StoreOptions(_ =>
+            {
+                _.UseDefaultSerialization(casing: Casing.CamelCase);
+            });
+
+            using var session = theStore.LightweightSession();
+
+            var expressionWithSimpleProperty = new PatchExpression<Target>(new ByGuidFilter(Guid.NewGuid()), (DocumentSessionBase) session);
+            expressionWithSimpleProperty.Set(x => x.Color, Colors.Blue);
+            expressionWithSimpleProperty.Patch["path"].ShouldBe("color");
+
+            var expressionWithNestedProperty = new PatchExpression<Target>(new ByGuidFilter(Guid.NewGuid()), (DocumentSessionBase) session);
+            expressionWithNestedProperty.Delete(x => x.Inner.AnotherString);
+            expressionWithNestedProperty.Patch["path"].ShouldBe("inner.anotherString");
+        }
+
+        public class Item
+        {
+            public string Name { get; set; }
+        }
+
+        public class ColoredItem: Item
+        {
+            public string Color { get; set; }
+        }
+
+        public class NumberedItem: Item
+        {
+            public int Number { get; set; }
+        }
+
+        public class ItemGroup
+        {
+            public Guid Id { get; set; }
+            public List<Item> Items = new List<Item>();
+        }
+
+        [Fact]
+        public void can_append_with_sub_types_in_collection()
+        {
+            var group = new ItemGroup();
+            theSession.Store(group);
+            theSession.SaveChanges();
+
+            using (var session = theStore.LightweightSession())
+            {
+                session.Patch<ItemGroup>(group.Id).Append(x => x.Items, new Item{Name = "One"});
+                session.Patch<ItemGroup>(group.Id).Append(x => x.Items, new ColoredItem{Name = "Two", Color = "Blue"});
+                session.Patch<ItemGroup>(group.Id).Append(x => x.Items, new NumberedItem(){Name = "Three", Number = 3});
+                session.SaveChanges();
+            }
+
+            using (var query = theStore.QuerySession())
+            {
+                var group2 = query.Load<ItemGroup>(group.Id);
+
+                group2.Items.Count.ShouldBe(3);
+                group2.Items[0].ShouldBeOfType<Item>();
+                group2.Items[1].ShouldBeOfType<ColoredItem>();
+                group2.Items[2].ShouldBeOfType<NumberedItem>();
+            }
+        }
+
+        [Fact]
+        public void can_append_if_not_exists_with_sub_types_in_collection()
+        {
+            var group = new ItemGroup();
+            theSession.Store(group);
+            theSession.SaveChanges();
+
+            using (var session = theStore.LightweightSession())
+            {
+                session.Patch<ItemGroup>(group.Id).AppendIfNotExists(x => x.Items, new Item{Name = "One"});
+                session.Patch<ItemGroup>(group.Id).AppendIfNotExists(x => x.Items, new ColoredItem{Name = "Two", Color = "Blue"});
+                session.Patch<ItemGroup>(group.Id).AppendIfNotExists(x => x.Items, new NumberedItem(){Name = "Three", Number = 3});
+                session.SaveChanges();
+            }
+
+            using (var query = theStore.QuerySession())
+            {
+                var group2 = query.Load<ItemGroup>(group.Id);
+
+                group2.Items.Count.ShouldBe(3);
+                group2.Items[0].ShouldBeOfType<Item>();
+                group2.Items[1].ShouldBeOfType<ColoredItem>();
+                group2.Items[2].ShouldBeOfType<NumberedItem>();
+            }
+        }
+
+        [Fact]
+        public void can_insert_if_not_exists_with_sub_types_in_collection()
+        {
+            var group = new ItemGroup
+            {
+                Items = new List<Item>{new Item{Name = "regular"}}
+            };
+            theSession.Store(group);
+            theSession.SaveChanges();
+
+            using (var session = theStore.LightweightSession())
+            {
+                session.Patch<ItemGroup>(group.Id).Insert(x => x.Items, new ColoredItem{Name = "Two", Color = "Blue"});
+                session.SaveChanges();
+            }
+
+            using (var query = theStore.QuerySession())
+            {
+                var group2 = query.Load<ItemGroup>(group.Id);
+
+                group2.Items.Count.ShouldBe(2);
+                group2.Items[0].ShouldBeOfType<ColoredItem>();
+            }
         }
     }
 }

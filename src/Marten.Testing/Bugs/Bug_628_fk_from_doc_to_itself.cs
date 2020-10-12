@@ -1,9 +1,10 @@
-﻿using System;
+using System;
+using Marten.Testing.Harness;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_628_fk_from_doc_to_itself : IntegratedFixture
+    public class Bug_628_fk_from_doc_to_itself: BugIntegrationContext
     {
         public class Category
         {
@@ -22,5 +23,6 @@ namespace Marten.Testing.Bugs
 
             theStore.Schema.ApplyAllConfiguredChangesToDatabase();
         }
+
     }
 }

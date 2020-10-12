@@ -1,5 +1,5 @@
-﻿using System.Linq;
 using Marten.Events.Projections;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
@@ -10,7 +10,7 @@ namespace Marten.Testing.Events.Projections
         [Fact]
         public void consumes_delegates_to_internal_aggregation()
         {
-            var aggregator =  new Aggregator<QuestParty>();
+            var aggregator = new Aggregator<QuestParty>();
             var projection = new AggregationProjection<QuestParty>(null, aggregator);
 
             projection.Consumes.ShouldHaveTheSameElementsAs(aggregator.EventTypes);

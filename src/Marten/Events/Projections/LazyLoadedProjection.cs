@@ -1,27 +1,28 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Marten.Events.Projections.Async;
 using Marten.Storage;
+using Marten.Util;
 
 namespace Marten.Events.Projections
 {
-    public class LazyLoadedProjection<T> : IProjection, IDocumentsProjection
-        where T : IProjection, new()
+    public class LazyLoadedProjection<T>: IProjection, IDocumentsProjection
+        where T : IProjection
     {
-        private readonly Func<T> factory;        
+        private readonly Func<T> factory;
 
         public LazyLoadedProjection(Func<T> factory)
         {
             this.factory = factory;
-            var definition = new T();
+            var definition = New<T>.Instance();
 
             Consumes = definition.Consumes;
             AsyncOptions = definition.AsyncOptions;
             Produces = (definition as IDocumentsProjection)?.Produces;
             if (Produces?.Any() != true && definition is IDocumentProjection documentProjection)
-                Produces = new[] {documentProjection.Produces};
+                Produces = new[] { documentProjection.Produces };
         }
 
         public Type[] Consumes { get; }
@@ -43,7 +44,6 @@ namespace Marten.Events.Projections
             factory().EnsureStorageExists(tenant);
         }
 
-
-        public Type[] Produces { get; }        
+        public Type[] Produces { get; }
     }
 }

@@ -1,7 +1,6 @@
-﻿using System;
+using System;
 using System.Linq;
 using Marten.Testing.Documents;
-using StructureMap;
 
 namespace Marten.Testing.Examples
 {
@@ -12,8 +11,8 @@ namespace Marten.Testing.Examples
         {
             using (var session = store.LightweightSession())
             {
-                var user = new User {FirstName = "Jeremy", LastName = "Miller"};
-                
+                var user = new User { FirstName = "Jeremy", LastName = "Miller" };
+
                 // Manually adding the new user to the session
                 session.Store(user);
 
@@ -30,8 +29,8 @@ namespace Marten.Testing.Examples
                 session.SaveChanges();
             }
         }
-        // ENDSAMPLE
 
+        // ENDSAMPLE
 
         // SAMPLE: tracking_document_session_uow
         public void tracking_document_session(IDocumentStore store)
@@ -53,6 +52,7 @@ namespace Marten.Testing.Examples
                 session.SaveChanges();
             }
         }
+
         // ENDSAMPLE
     }
 }

@@ -1,18 +1,19 @@
-﻿using System.Linq;
+using System.Linq;
 using Baseline;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Linq
 {
-    public class EqualsIgnoreCase_filtering : IntegratedFixture
+    public class EqualsIgnoreCase_filtering: IntegrationContext
     {
         [Fact]
         public void can_search_case_insensitive()
         {
-            var user1 = new User{UserName = "Abc"};
-            var user2 = new User{UserName = "DeF"};
+            var user1 = new User { UserName = "Abc" };
+            var user2 = new User { UserName = "DeF" };
 
             using (var session = theStore.OpenSession())
             {
@@ -30,6 +31,10 @@ namespace Marten.Testing.Linq
 
                 query.Query<User>().Any(x => x.UserName.EqualsIgnoreCase("abcd")).ShouldBeFalse();
             }
+        }
+
+        public EqualsIgnoreCase_filtering(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

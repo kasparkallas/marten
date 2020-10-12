@@ -1,12 +1,13 @@
-﻿using System.Linq;
+using System.Linq;
+using Marten.Services;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
-using Marten.Services;
 
 namespace Marten.Testing.Bugs
 {
-    [Collection("DefaultSchema")]
-    public class Bug_130_enable_case_insensitive_custom_sql_queries_Tests : DocumentSessionFixture<NulloIdentityMap>
+    public class Bug_130_enable_case_insensitive_custom_sql_queries_Tests: BugIntegrationContext
     {
         [Fact]
         public void query()
@@ -15,7 +16,7 @@ namespace Marten.Testing.Bugs
             theSession.Store(entity);
             theSession.SaveChanges();
 
-            theSession.Query<Target>("SELECT data FROM mt_doc_target").Single().Id.ShouldBe(entity.Id);
+            theSession.Query<Target>($"SELECT data FROM {SchemaName}.mt_doc_target").Single().Id.ShouldBe(entity.Id);
         }
     }
 }

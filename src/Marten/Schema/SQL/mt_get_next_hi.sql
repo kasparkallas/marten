@@ -1,4 +1,4 @@
-﻿CREATE OR REPLACE FUNCTION {databaseSchema}.mt_get_next_hi(entity varchar) RETURNS int AS $$
+﻿CREATE OR REPLACE FUNCTION {databaseSchema}.mt_get_next_hi(entity varchar) RETURNS integer AS $$
 DECLARE
 	current_value bigint;
 	next_value bigint;
@@ -9,7 +9,12 @@ BEGIN
 		next_value := 0;
 	ELSE
 		next_value := current_value + 1;
-		update {databaseSchema}.mt_hilo set hi_value = next_value where entity_name = entity;
+		update {databaseSchema}.mt_hilo set hi_value = next_value where entity_name = entity and hi_value = current_value;
+
+        IF NOT FOUND THEN
+            next_value := -1;
+        END IF;
+
 	END IF;
 
 	return next_value;

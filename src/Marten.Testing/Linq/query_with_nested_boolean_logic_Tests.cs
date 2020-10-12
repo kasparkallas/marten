@@ -2,14 +2,19 @@
 using System.Collections.Generic;
 using System.Linq;
 using Marten.Services;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Marten.Testing.Linq
 {
     [ControlledQueryStoryteller]
-    public class query_with_nested_boolean_logic_Tests : DocumentSessionFixture<NulloIdentityMap>
+    public class query_with_nested_boolean_logic_Tests : IntegrationContext
     {
+        private readonly ITestOutputHelper _output;
+
         [Fact]
         public void TestModalOrQuery()
         {
@@ -27,6 +32,11 @@ namespace Marten.Testing.Linq
 
             query.ToList().Count.ShouldBeGreaterThanOrEqualTo(2);
 
+        }
+
+        public query_with_nested_boolean_logic_Tests(DefaultStoreFixture fixture, ITestOutputHelper output) : base(fixture)
+        {
+            _output = output;
         }
     }
 }

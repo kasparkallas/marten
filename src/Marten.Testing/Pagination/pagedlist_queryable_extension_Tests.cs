@@ -1,10 +1,15 @@
 ﻿using System;
 using System.Linq;
+using System.Linq.Expressions;
 using Xunit;
 using Shouldly;
 using Marten.Services;
 using Marten.Pagination;
 using System.Threading.Tasks;
+using Marten.Exceptions;
+using Marten.Linq;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 
 namespace Marten.Testing.Pagination
 {
@@ -13,7 +18,7 @@ namespace Marten.Testing.Pagination
         public string Id { get; set; }
     }
 
-    public class pagedlist_queryable_extension_Tests : DocumentSessionFixture<NulloIdentityMap>
+    public class pagedlist_queryable_extension_Tests : IntegrationContext
     {
         private void BuildUpTargetData()
         {
@@ -35,7 +40,7 @@ namespace Marten.Testing.Pagination
             theSession.SaveChanges();
         }
 
-        public pagedlist_queryable_extension_Tests()
+        public pagedlist_queryable_extension_Tests(DefaultStoreFixture fixture) : base(fixture)
         {
             BuildUpTargetData();
         }
@@ -61,7 +66,7 @@ namespace Marten.Testing.Pagination
             // ENDSAMPLE
 
             pagedList.Count.ShouldBe(pageSize);
-            
+
         }
 
         [Fact]
@@ -89,7 +94,7 @@ namespace Marten.Testing.Pagination
             var ex =
                 Exception<ArgumentOutOfRangeException>.ShouldBeThrownBy(
                     () => theSession.Query<Target>().ToPagedList(pageNumber, pageSize));
-            ex.Message.ShouldContain("pageNumber = 0. PageNumber cannot be below 1.");
+            SpecificationExtensions.ShouldContain(ex.Message, "pageNumber = 0. PageNumber cannot be below 1.");
         }
 
         [Fact]
@@ -103,13 +108,13 @@ namespace Marten.Testing.Pagination
             var ex =
                 Exception<ArgumentOutOfRangeException>.ShouldBeThrownBy(
                     () => theSession.Query<Target>().ToPagedList(pageNumber, pageSize));
-            ex.Message.ShouldContain($"pageSize = 0. PageSize cannot be below 1.");
+            SpecificationExtensions.ShouldContain(ex.Message, $"pageSize = 0. PageSize cannot be below 1.");
         }
 
         [Fact]
         public void check_computed_pagecount()
         {
-            // page number ouside the page range, page range is between 1 and 10 for the sample 
+            // page number ouside the page range, page range is between 1 and 10 for the sample
             var pageNumber = 1;
 
             var pageSize = 10;
@@ -161,7 +166,7 @@ namespace Marten.Testing.Pagination
 
         [Fact]
         public void check_has_next_page()
-        { 
+        {
             var pageNumber = 1;
 
             var pageSize = 10;
@@ -292,6 +297,32 @@ namespace Marten.Testing.Pagination
             var pageSize = 10;
 
             var pagedList = theSession.Query<Target>().Where(x=>x.Flag).ToPagedList(pageNumber, pageSize);
+        }
+
+        [Fact]
+        public void try_to_use_in_compiled_query()
+        {
+            Exception<BadLinqExpressionException>.ShouldBeThrownBy(() =>
+            {
+                var data = theSession.Query(new TargetPage(1, 10));
+            });
+        }
+
+        public class TargetPage: ICompiledQuery<Target, IPagedList<Target>>
+        {
+            public int Page { get; }
+            public int PageSize { get; }
+
+            public TargetPage(int page, int pageSize)
+            {
+                Page = page;
+                PageSize = pageSize;
+            }
+
+            public Expression<Func<IMartenQueryable<Target>, IPagedList<Target>>> QueryIs()
+            {
+                return q => q.OrderBy(x => x.Number).ToPagedList(Page, PageSize);
+            }
         }
     }
 }

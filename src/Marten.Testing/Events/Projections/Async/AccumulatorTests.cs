@@ -1,11 +1,11 @@
-﻿using Marten.Events;
+using Marten.Events;
 using Marten.Events.Projections.Async;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events.Projections.Async
 {
-
     public static class EventMother
     {
         public static IEvent[] Random(int count)
@@ -13,7 +13,7 @@ namespace Marten.Testing.Events.Projections.Async
             var events = new IEvent[count];
             for (int i = 0; i < events.Length; i++)
             {
-                events[i] = new Event<MembersJoined>(new MembersJoined{Day = i});
+                events[i] = new Event<MembersJoined>(new MembersJoined { Day = i });
             }
 
             return events;
@@ -27,8 +27,8 @@ namespace Marten.Testing.Events.Projections.Async
         [Fact]
         public void initial_state()
         {
-            theAccumulator.First.ShouldBeNull();
-            theAccumulator.Last.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(theAccumulator.First);
+            SpecificationExtensions.ShouldBeNull(theAccumulator.Last);
 
             theAccumulator.CachedEventCount.ShouldBe(0);
         }

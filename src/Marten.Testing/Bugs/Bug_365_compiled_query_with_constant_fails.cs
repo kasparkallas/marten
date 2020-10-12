@@ -1,15 +1,16 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Marten.Linq;
 using Marten.Services;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_365_compiled_query_with_constant_fails : DocumentSessionFixture<NulloIdentityMap>
+    public class Bug_365_compiled_query_with_constant_fails: BugIntegrationContext
     {
         public class Route
         {
@@ -44,11 +45,10 @@ namespace Marten.Testing.Bugs
                 _.Schema.For<Route>();
             });
 
-            theStore.Tenancy.Default.StorageFor(typeof(Route)).ShouldNotBeNull();
+            SpecificationExtensions.ShouldNotBeNull(theStore.Tenancy.Default.StorageFor<Route>());
         }
 
-
-        public class RoutesPlannedAfter : ICompiledQuery<Route, IEnumerable<Route>>
+        public class RoutesPlannedAfter: ICompiledQuery<Route, IEnumerable<Route>>
         {
             public DateTime DateTime { get; }
 
@@ -57,7 +57,7 @@ namespace Marten.Testing.Bugs
                 DateTime = dateTime;
             }
 
-            public Expression<Func<IQueryable<Route>, IEnumerable<Route>>> QueryIs()
+            public Expression<Func<IMartenQueryable<Route>, IEnumerable<Route>>> QueryIs()
             {
                 return query => query.Where(route => route.Status == RouteStatus.Planned && route.Date > DateTime);
             }
@@ -86,7 +86,7 @@ namespace Marten.Testing.Bugs
                 for (var index = 0; index < number; index++)
                 {
                     var route = new Route();
-                    if (index%2 == 0)
+                    if (index % 2 == 0)
                     {
                         route.Plan(DateTime.Today.AddDays(index + 1));
                     }

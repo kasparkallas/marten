@@ -6,14 +6,18 @@ using System.Reflection;
 using Baseline;
 using Baseline.Reflection;
 using Marten.Linq;
+using Marten.Linq.Fields;
+using Marten.Linq.Filters;
 using Marten.Linq.Parsing;
+using Marten.Linq.SqlGeneration;
 using Marten.Schema;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Linq
 {
-    
+
     public class using_custom_Linq_parser_plugins_Tests
     {
         // SAMPLE: using_custom_linq_parser
@@ -27,6 +31,9 @@ namespace Marten.Testing.Linq
                 // IsBlue is a custom parser I used for testing this
                 _.Linq.MethodCallParsers.Add(new IsBlue());
                 _.AutoCreateSchemaObjects = AutoCreate.All;
+
+                // This is just to isolate the test
+                _.DatabaseSchemaName = "isblue";
             }))
             {
 
@@ -49,7 +56,7 @@ namespace Marten.Testing.Linq
 
                 using (var session = store.QuerySession())
                 {
-                    session.Query<ColorTarget>().Where(x => x.IsBlue()).Count()
+                    session.Query<ColorTarget>().Count(x => CustomExtensions.IsBlue(x))
                         .ShouldBe(count);
                 }
             }
@@ -73,7 +80,7 @@ namespace Marten.Testing.Linq
         }
         // ENDSAMPLE
     }
-    
+
     // SAMPLE: IsBlue
     public class IsBlue : IMethodCallParser
     {
@@ -84,9 +91,9 @@ namespace Marten.Testing.Linq
             return expression.Method.Name == nameof(CustomExtensions.IsBlue);
         }
 
-        public IWhereFragment Parse(IQueryableDocument mapping, ISerializer serializer, MethodCallExpression expression)
+        public ISqlFragment Parse(IFieldMapping mapping, ISerializer serializer, MethodCallExpression expression)
         {
-            var locator = mapping.FieldFor(new MemberInfo[] {_property}).SqlLocator;
+            var locator = mapping.FieldFor(new MemberInfo[] {_property}).TypedLocator;
 
             return new WhereFragment($"{locator} = 'Blue'");
         }

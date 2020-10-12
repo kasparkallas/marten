@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using Marten.Events;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
@@ -14,7 +15,6 @@ namespace Marten.Testing.Events
         {
             theGraph.StreamIdentity.ShouldBe(StreamIdentity.AsGuid);
         }
-
 
         [Fact]
         public void find_stream_mapping_initially()
@@ -33,10 +33,10 @@ namespace Marten.Testing.Events
         [Fact]
         public void register_event_types_and_retrieve()
         {
-            theGraph.AddEventType(typeof (IssueAssigned));
-            theGraph.AddEventType(typeof (IssueCreated));
-            theGraph.AddEventType(typeof (MembersJoined));
-            theGraph.AddEventType(typeof (MembersDeparted));
+            theGraph.AddEventType(typeof(IssueAssigned));
+            theGraph.AddEventType(typeof(IssueCreated));
+            theGraph.AddEventType(typeof(MembersJoined));
+            theGraph.AddEventType(typeof(MembersDeparted));
 
             theGraph.EventMappingFor<IssueAssigned>().ShouldBeTheSameAs(theGraph.EventMappingFor<IssueAssigned>());
         }
@@ -73,7 +73,6 @@ namespace Marten.Testing.Events
             theGraph.AddEventType(typeof(IssueAssigned));
             theGraph.IsActive(null).ShouldBeTrue();
         }
-
 
         public class HouseRemodeling
         {

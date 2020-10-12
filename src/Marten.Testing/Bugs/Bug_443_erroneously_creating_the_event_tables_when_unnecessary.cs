@@ -1,12 +1,14 @@
-﻿using System;
+using System;
 using System.Linq;
 using Baseline;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
+using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_443_erroneously_creating_the_event_tables_when_unnecessary : IntegratedFixture
+    public class Bug_443_erroneously_creating_the_event_tables_when_unnecessary: BugIntegrationContext
     {
         [Fact]
         public void event_table_should_not_be_there_if_unused()
@@ -26,8 +28,8 @@ namespace Marten.Testing.Bugs
         {
             var ddl = theStore.Schema.ToDDL();
 
-            ddl.ShouldNotContain("mt_events");
-            ddl.ShouldNotContain("mt_streams");
+            SpecificationExtensions.ShouldNotContain(ddl, "mt_events");
+            SpecificationExtensions.ShouldNotContain(ddl, "mt_streams");
         }
 
         [Fact]
@@ -35,8 +37,8 @@ namespace Marten.Testing.Bugs
         {
             var patch = theStore.Schema.ToPatch();
 
-            patch.UpdateDDL.ShouldNotContain("mt_events");
-            patch.UpdateDDL.ShouldNotContain("mt_streams");
+            SpecificationExtensions.ShouldNotContain(patch.UpdateDDL, "mt_events");
+            SpecificationExtensions.ShouldNotContain(patch.UpdateDDL, "mt_streams");
         }
 
         [Fact]
@@ -45,14 +47,13 @@ namespace Marten.Testing.Bugs
             var directory = AppContext.BaseDirectory.AppendPath("sql");
             var fileSystem = new FileSystem();
             fileSystem.CleanDirectory(directory);
-            
+
             theStore.Schema.WriteDDLByType(directory);
 
             fileSystem.FindFiles(directory, FileSet.Shallow("*.sql"))
                 .Any(x => x.EndsWith("mt_streams.sql"))
                 .ShouldBeFalse();
-
-            
         }
+
     }
 }

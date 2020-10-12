@@ -7,17 +7,20 @@ using System.Threading.Tasks;
 using Baseline;
 using Marten.Linq;
 using Marten.Services;
-using Marten.Services.Includes;
+using Marten.Testing.Harness;
 using Marten.Util;
 using Shouldly;
 using Xunit;
+using Xunit.Abstractions;
 using Issue = Marten.Testing.Documents.Issue;
 using User = Marten.Testing.Documents.User;
 
 namespace Marten.Testing.Services.Includes
 {
-    public class end_to_end_query_with_compiled_include_Tests : DocumentSessionFixture<IdentityMap>
+    public class end_to_end_query_with_compiled_include_Tests : IntegrationContext
     {
+        private readonly ITestOutputHelper _output;
+
         // SAMPLE: compiled_include
         [Fact]
         public void simple_compiled_include_for_a_single_document()
@@ -33,78 +36,38 @@ namespace Marten.Testing.Services.Includes
                 var issueQuery = new IssueByTitleWithAssignee {Title = issue.Title};
                 var issue2 = query.Query(issueQuery);
 
-                issueQuery.Included.ShouldNotBeNull();
-                issueQuery.Included.Id.ShouldBe(user.Id);
+                SpecificationExtensions.ShouldNotBeNull(issueQuery.Included);
+                issueQuery.Included.Single().Id.ShouldBe(user.Id);
 
-                issue2.ShouldNotBeNull();
+                SpecificationExtensions.ShouldNotBeNull(issue2);
             }
         }
 
         public class IssueByTitleWithAssignee : ICompiledQuery<Issue>
         {
             public string Title { get; set; }
-            public User Included { get; private set; } = new User();
-            public JoinType JoinType { get; set; } = JoinType.Inner;
+            public IList<User> Included { get; private set; } = new List<User>();
 
-            public Expression<Func<IQueryable<Issue>, Issue>> QueryIs()
+            public Expression<Func<IMartenQueryable<Issue>, Issue>> QueryIs()
             {
                 return query => query
-                    .Include<Issue, IssueByTitleWithAssignee>(x => x.AssigneeId, x => x.Included, JoinType)
+                    .Include(x => x.AssigneeId, Included)
                     .Single(x => x.Title == Title);
             }
         }
         // ENDSAMPLE
 
-        [Fact]
-        public void compiled_query_with_multi_includes()
-        {
-            var user = new User();
-            var reporter = new User();
-            var issue = new Issue { AssigneeId = user.Id, ReporterId = reporter.Id, Title = "Garage Door is busted" };
-
-            theSession.Store<object>(user, reporter, issue);
-            theSession.SaveChanges();
-
-            using (var query = theStore.QuerySession())
-            {
-                var issueQuery = new IssueByTitleIncludingUsers {Title = issue.Title};
-                var issue2 = query.Query(issueQuery);
-
-                issueQuery.IncludedAssignee.ShouldNotBeNull();
-                issueQuery.IncludedAssignee.Id.ShouldBe(user.Id);
-                issueQuery.IncludedReported.ShouldNotBeNull();
-                issueQuery.IncludedReported.Id.ShouldBe(reporter.Id);
-
-                issue2.ShouldNotBeNull();
-            }
-        }
-
-public class IssueByTitleIncludingUsers : ICompiledQuery<Issue>
-{
-    public string Title { get; set; }
-    public User IncludedAssignee { get; private set; } = new User();
-    public User IncludedReported { get; private set; } = new User();
-    public JoinType JoinType { get; set; } = JoinType.Inner;
-
-    public Expression<Func<IQueryable<Issue>, Issue>> QueryIs()
-    {
-        return query => query
-            .Include<Issue, IssueByTitleIncludingUsers>(x => x.AssigneeId, x => x.IncludedAssignee, JoinType)
-            .Include<Issue, IssueByTitleIncludingUsers>(x => x.ReporterId, x => x.IncludedReported, JoinType)
-            .Single(x => x.Title == Title);
-    }
-}
 
         // SAMPLE: compiled_include_list
         public class IssueWithUsers : ICompiledListQuery<Issue>
         {
-            public List<User> Users { get; set; }
+            public List<User> Users { get; set; } = new List<User>();
             // Can also work like that:
             //public List<User> Users => new List<User>();
 
-            public Expression<Func<IQueryable<Issue>, IEnumerable<Issue>>> QueryIs()
+            public Expression<Func<IMartenQueryable<Issue>, IEnumerable<Issue>>> QueryIs()
             {
-                return query => query.Include<Issue, IssueWithUsers>(x => x.AssigneeId, x => x.Users, JoinType.Inner);
+                return query => query.Include(x => x.AssigneeId, Users);
             }
         }
 
@@ -140,13 +103,13 @@ public class IssueByTitleIncludingUsers : ICompiledQuery<Issue>
         // SAMPLE: compiled_include_dictionary
         public class IssueWithUsersById : ICompiledListQuery<Issue>
         {
-            public IDictionary<Guid,User> UsersById { get; set; }
+            public IDictionary<Guid,User> UsersById { get; set; } = new Dictionary<Guid, User>();
             // Can also work like that:
             //public List<User> Users => new Dictionary<Guid,User>();
 
-            public Expression<Func<IQueryable<Issue>, IEnumerable<Issue>>> QueryIs()
+            public Expression<Func<IMartenQueryable<Issue>, IEnumerable<Issue>>> QueryIs()
             {
-                return query => query.Include<Issue, IssueWithUsersById>(x => x.AssigneeId, x => x.UsersById, JoinType.Inner);
+                return query => query.Include(x => x.AssigneeId, UsersById);
             }
         }
 
@@ -178,5 +141,10 @@ public class IssueByTitleIncludingUsers : ICompiledQuery<Issue>
             }
         }
         // ENDSAMPLE
+        public end_to_end_query_with_compiled_include_Tests(DefaultStoreFixture fixture, ITestOutputHelper output) : base(fixture)
+        {
+            _output = output;
+            DocumentTracking = DocumentTracking.IdentityOnly;
+        }
     }
 }

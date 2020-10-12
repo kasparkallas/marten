@@ -1,19 +1,19 @@
-﻿using System;
+using System;
 using System.Linq;
-using Marten.Storage;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
+using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Acceptance
 {
-    public class disabling_plv8 : IntegratedFixture
+    public class disabling_plv8: IntegrationContext
     {
         [Fact]
         public void active_features_includes_transforms_with_plv8_enabled()
         {
             theStore.Storage.AllActiveFeatures(theStore.Tenancy.Default)
                     .Any(x => x is Marten.Transforms.Transforms).ShouldBeTrue();
-
         }
 
         [Fact]
@@ -26,7 +26,6 @@ namespace Marten.Testing.Acceptance
 
             theStore.Storage.AllActiveFeatures(theStore.Tenancy.Default)
                     .Any(x => x is Marten.Transforms.Transforms).ShouldBeFalse();
-
         }
 
         [Fact]
@@ -39,11 +38,11 @@ namespace Marten.Testing.Acceptance
 
             using (var session = theStore.OpenSession())
             {
-                Exception<InvalidOperationException>.ShouldBeThrownBy(() =>
+                SpecificationExtensions.ShouldContain(Exception<InvalidOperationException>.ShouldBeThrownBy(() =>
                 {
                     session.Patch<User>(Guid.NewGuid()).Set("foo", "bar");
                     session.SaveChanges();
-                }).Message.ShouldContain("PLV8");
+                }).Message, "PLV8");
             }
         }
 
@@ -54,13 +53,15 @@ namespace Marten.Testing.Acceptance
             {
                 _.PLV8Enabled = false;
             });
-            
-            
 
-            Exception<InvalidOperationException>.ShouldBeThrownBy(() =>
+            SpecificationExtensions.ShouldContain(Exception<InvalidOperationException>.ShouldBeThrownBy(() =>
             {
                 theStore.Transform.All<User>("something");
-            }).Message.ShouldContain("PLV8");
+            }).Message, "PLV8");
+        }
+
+        public disabling_plv8(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

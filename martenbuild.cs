@@ -1,17 +1,26 @@
-﻿using System;
+using System;
 using System.IO;
+using System.Reflection;
+using System.Runtime.Versioning;
+using System.Threading;
+using Npgsql;
 using static Bullseye.Targets;
 using static SimpleExec.Command;
 using static Westwind.Utilities.FileUtils;
 
 namespace martenbuild
 {
-    class MartenBuild
+    internal class MartenBuild
     {
-        private const string BUILD_VERSION = "3.1.0";
+        private const string BUILD_VERSION = "3.12.3";
 
-        static void Main(string[] args)
+        private const string DockerConnectionString =
+            "Host=localhost;Port=5432;Database=marten_testing;Username=postgres;password=postgres";
+
+        private static void Main(string[] args)
         {
+            var framework = GetFramework();
+
             var configuration = Environment.GetEnvironmentVariable("config");
             configuration = string.IsNullOrEmpty(configuration) ? "debug" : configuration;
 
@@ -32,49 +41,47 @@ namespace martenbuild
                 RunNpm("run test"));
 
             Target("compile", DependsOn("clean"), () =>
-                Run("dotnet", $"build src/Marten.Testing/Marten.Testing.csproj --framework netcoreapp2.1 --configuration {configuration}"));
+            {
+                Run("dotnet",
+                    $"build src/Marten.Testing/Marten.Testing.csproj --framework {framework} --configuration {configuration}");
 
-            Target("test", DependsOn("compile"), () =>
-                Run("dotnet", $"test src/Marten.Testing/Marten.Testing.csproj --framework netcoreapp2.1 --configuration {configuration} --no-build"));
+                Run("dotnet",
+                    $"build src/Marten.Schema.Testing/Marten.Schema.Testing.csproj --configuration {configuration}");
+            });
+
+            Target("compile-noda-time", DependsOn("clean"), () =>
+                Run("dotnet", $"build src/Marten.NodaTime.Testing/Marten.NodaTime.Testing.csproj --framework {framework} --configuration {configuration}"));
+
+            Target("test-noda-time", DependsOn("compile-noda-time"), () =>
+                Run("dotnet", $"test src/Marten.NodaTime.Testing/Marten.NodaTime.Testing.csproj --framework {framework} --configuration {configuration} --no-build"));
+
+            Target("test-schema", () =>
+                Run("dotnet", $"test src/Marten.Schema.Testing/Marten.Schema.Testing.csproj --framework {framework} --configuration {configuration} --no-build"));
+
+            Target("test-commands", () =>
+                Run("dotnet", $"test src/Marten.CommandLine.Testing/Marten.CommandLine.Testing.csproj --framework {framework} --configuration {configuration} --no-build"));
+
+
+            Target("test-marten", DependsOn("compile", "test-noda-time"), () =>
+                Run("dotnet", $"test src/Marten.Testing/Marten.Testing.csproj --framework {framework} --configuration {configuration} --no-build"));
+
+            Target("test", DependsOn("test-marten", "test-noda-time", "test-commands", "test-schema"));
 
             Target("storyteller", DependsOn("compile"), () =>
-                Run("dotnet", $"run --framework netcoreapp2.1 --culture en-US", "src/Marten.Storyteller"));
+                Run("dotnet", $"run --framework {framework} --culture en-US", "src/Marten.Storyteller"));
 
             Target("open_st", DependsOn("compile"), () =>
-                Run("dotnet", $"storyteller open --framework netcoreapp2.1 --culture en-US", "src/Marten.Storyteller"));
+                Run("dotnet", $"storyteller open --framework {framework} --culture en-US", "src/Marten.Storyteller"));
 
-            Target("docs-restore", () =>
-                Run("dotnet", "restore", "tools/stdocs"));
+            Target("docs", () =>
+                Run("dotnet", $"stdocs run -d documentation -c src -v {BUILD_VERSION}"));
 
-            Target("docs", DependsOn("docs-restore"), () =>
-                RunStoryTellerDocs($"run -d ../../documentation -c ../../src -v {BUILD_VERSION}"));
-
-            // Exports the documentation to jasperfx.github.io/marten - requires Git access to that repo though!
-            Target("publish", () =>
+            Target("publish-docs", () =>
             {
-                const string docTargetDir = "doc-target";
-
-                if (!Directory.Exists(docTargetDir))
-                {
-                    Run("git", $"clone -b gh-pages https://github.com/jasperfx/marten.git {InitializeDirectory(docTargetDir)}");
-
-                    // if you are not using git --global config, uncomment the block below, update and use it
-                    // Run("git", "config user.email email_address", docTargetDir);
-                    // Run("git", "config user.name your_name", docTargetDir);
-                }
-                else
-                {
-                    Run("git", "checkout --force", docTargetDir);
-                    Run("git", "clean -xfd", docTargetDir);
-                    Run("git", "pull origin master", docTargetDir);
-                }
-
-                RunStoryTellerDocs(
-                    $"export ../../{docTargetDir} ProjectWebsite -d ../../documentation -c ../../src -v {BUILD_VERSION} --project marten");
-
-                Run("git", "add --all", docTargetDir);
-                Run("git", $"commit -a -m \"Documentation Update for {BUILD_VERSION}\" --allow-empty", docTargetDir);
-                Run("git", "push origin gh-pages", docTargetDir);
+                // Exports the documentation to jasperfx.github.io/marten - requires Git access to that repo though!
+                PublishDocs(branchName: "gh-pages", exportWithGithubProjectPrefix: true);
+                // Exports the documentation to Netlify - martendb.io - requires Git access to that repo though!
+                PublishDocs(branchName: "gh-pages-netlify", exportWithGithubProjectPrefix: false);
             });
 
             Target("benchmarks", () =>
@@ -90,10 +97,60 @@ namespace martenbuild
                 }
             });
 
-            Target("pack", DependsOn("compile"), ForEach("./src/Marten", "./src/Marten.CommandLine"), project =>
-                Run("dotnet", $"pack {project} -o ./../../artifacts --configuration Release"));
+            Target("pack", DependsOn("compile"), ForEach("./src/Marten", "./src/Marten.CommandLine", "./src/Marten.NodaTime"), project =>
+                Run("dotnet", $"pack {project} -o ./artifacts --configuration Release"));
+
+            Target("init-db", () =>
+            {
+                Run("docker-compose", "up -d");
+
+                WaitForDatabaseToBeReady();
+
+            });
 
             RunTargetsAndExit(args);
+        }
+
+        private static void WaitForDatabaseToBeReady()
+        {
+            var attempt = 0;
+            while (attempt < 10)
+                try
+                {
+                    using (var conn = new NpgsqlConnection(DockerConnectionString))
+                    {
+                        conn.Open();
+
+                        var cmd = conn.CreateCommand();
+                        cmd.CommandText = "create extension if not exists plv8";
+                        cmd.ExecuteNonQuery();
+
+                        Console.WriteLine("Postgresql is up and ready!");
+                        break;
+                    }
+                }
+                catch (Exception)
+                {
+                    Thread.Sleep(250);
+                    attempt++;
+                }
+        }
+
+        private static void PublishDocs(string branchName, bool exportWithGithubProjectPrefix, string docTargetDir = "doc-target")
+        {
+            Run("git", $"clone -b {branchName} https://github.com/jasperfx/marten.git {InitializeDirectory(docTargetDir)}");
+            // if you are not using git --global config, un-comment the block below, update and use it
+            // Run("git", "config user.email user_email", docTargetDir);
+            // Run("git", "config user.name user_name", docTargetDir);
+
+            if (exportWithGithubProjectPrefix)
+                Run("dotnet", $"stdocs export {docTargetDir} ProjectWebsite -d documentation -c src -v {BUILD_VERSION} --project marten");
+            else
+                Run("dotnet", $"stdocs export {docTargetDir} Website -d documentation -c src -v {BUILD_VERSION}");
+
+            Run("git", "add --all", docTargetDir);
+            Run("git", $"commit -a -m \"Documentation Update for {BUILD_VERSION}\" --allow-empty", docTargetDir);
+            Run("git", $"push origin {branchName}", docTargetDir);
         }
 
         private static string InitializeDirectory(string path)
@@ -109,27 +166,31 @@ namespace martenbuild
             {
                 if (Directory.Exists(path))
                 {
-                    Directory.Delete(path, true);
+                    var dir = new DirectoryInfo(path);
+                    DeleteDirectory(dir);
                 }
             }
         }
 
-        private static void RunNpm(string args)
+        private static string GetFramework()
         {
-            if (Environment.OSVersion.Platform != PlatformID.Unix && Environment.OSVersion.Platform != PlatformID.MacOSX)
-            {
-                Run("cmd.exe", $"/c npm {args}");
-            }
-            else
-            {
-                Run("npm", args);
-            }
+            var frameworkName = Assembly.GetEntryAssembly().GetCustomAttribute<TargetFrameworkAttribute>().FrameworkName;
+            return frameworkName.Replace(",Version=v", "").Replace(".NET", "NET").ToLower();
         }
 
-        private static void RunStoryTellerDocs(string args)
+        private static void DeleteDirectory(DirectoryInfo baseDir)
         {
-            Run("dotnet", "restore", "tools/stdocs");
-            Run("dotnet", $"stdocs {args}", "tools/stdocs");
+            baseDir.Attributes = FileAttributes.Normal;
+            foreach (var childDir in baseDir.GetDirectories())
+                DeleteDirectory(childDir);
+
+            foreach (var file in baseDir.GetFiles())
+                file.IsReadOnly = false;
+
+            baseDir.Delete(true);
         }
+
+        private static void RunNpm(string args) =>
+            Run("npm", args, windowsName: "cmd.exe", windowsArgs: $"/c npm {args}");
     }
 }

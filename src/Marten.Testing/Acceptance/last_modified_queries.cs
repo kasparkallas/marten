@@ -1,12 +1,13 @@
 using System.Linq;
 using Marten.Linq.LastModified;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Acceptance
 {
-    public class last_modified_queries : IntegratedFixture
+    public class last_modified_queries: IntegrationContext
     {
         [Fact]
         public void query_modified_since_docs()
@@ -21,7 +22,7 @@ namespace Marten.Testing.Acceptance
                 session.Store(user1, user2, user3, user4);
                 session.SaveChanges();
 
-                var epoch = session.DocumentStore.Tenancy.Default.MetadataFor(user4).LastModified;
+                var epoch = session.MetadataFor(user4).LastModified;
                 session.Store(user3, user4);
                 session.SaveChanges();
 
@@ -54,7 +55,7 @@ namespace Marten.Testing.Acceptance
                 session.Store(user3, user4);
                 session.SaveChanges();
 
-                var epoch = session.DocumentStore.Tenancy.Default.MetadataFor(user4).LastModified;
+                var epoch = session.MetadataFor(user4).LastModified;
 
                 // no where clause
                 session.Query<User>().Where(x => x.ModifiedBefore(epoch)).OrderBy(x => x.UserName).Select(x => x.UserName)
@@ -67,6 +68,10 @@ namespace Marten.Testing.Acceptance
                     .Select(x => x.UserName)
                     .Single().ShouldBe("foo");
             }
+        }
+
+        public last_modified_queries(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

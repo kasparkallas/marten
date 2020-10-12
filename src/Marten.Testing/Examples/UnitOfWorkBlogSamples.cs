@@ -1,13 +1,15 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Linq;
 using Baseline;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Examples
 {
-    public class UnitOfWorkBlogSamples : IntegratedFixture
+    public class UnitOfWorkBlogSamples: IntegrationContext
     {
         [Fact]
         public void show_unit_of_work()
@@ -22,10 +24,9 @@ namespace Marten.Testing.Examples
                 session.Logger = logger;
 
                 // Insert some new documents
-                session.Store(new User {UserName = "luke", FirstName = "Luke", LastName = "Skywalker"});
-                session.Store(new User {UserName = "leia", FirstName = "Leia", LastName = "Organa"});
-                session.Store(new User {UserName = "wedge", FirstName = "Wedge", LastName = "Antilles"});
-
+                session.Store(new User { UserName = "luke", FirstName = "Luke", LastName = "Skywalker" });
+                session.Store(new User { UserName = "leia", FirstName = "Leia", LastName = "Organa" });
+                session.Store(new User { UserName = "wedge", FirstName = "Wedge", LastName = "Antilles" });
 
                 // Delete all users matching a certain criteria
                 session.DeleteWhere<User>(x => x.UserName == "hansolo");
@@ -47,6 +48,10 @@ namespace Marten.Testing.Examples
                 new FileSystem()
                     .WriteStringToFile(directory, sql);
             }
+        }
+
+        public UnitOfWorkBlogSamples(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

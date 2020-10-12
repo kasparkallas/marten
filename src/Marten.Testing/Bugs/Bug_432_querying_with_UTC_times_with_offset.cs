@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using Baseline;
 using Baseline.Dates;
+using Marten.Testing.Harness;
 using Marten.Util;
 using Shouldly;
 using Xunit;
@@ -9,10 +10,13 @@ using Xunit.Abstractions;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_432_querying_with_UTC_times_with_offset : IntegratedFixture
+    public class Bug_432_querying_with_UTC_times_with_offset: BugIntegrationContext
     {
-        public Bug_432_querying_with_UTC_times_with_offset(ITestOutputHelper output) : base(output)
+        private readonly ITestOutputHelper _output;
+
+        public Bug_432_querying_with_UTC_times_with_offset(ITestOutputHelper output)
         {
+            _output = output;
         }
 
         [Fact]
@@ -47,7 +51,7 @@ namespace Marten.Testing.Bugs
 
                 _output.WriteLine(cmd.CommandText);
 
-                var sql = "select public.mt_immutable_timestamp(d.data ->> \'DateTimeField\') as time from public.mt_doc_dateclass as d";
+                var sql = $"select {SchemaName}.mt_immutable_timestamp(d.data ->> \'DateTimeField\') as time from {SchemaName}.mt_doc_dateclass as d";
 
                 using (var reader = session.Connection.CreateCommand().Sql(sql).ExecuteReader())
                 {
@@ -101,7 +105,7 @@ namespace Marten.Testing.Bugs
 
                 _output.WriteLine(cmd.CommandText);
 
-                var sql = "select public.mt_immutable_timestamp(d.data ->> \'dateTimeField\') as time from public.mt_doc_dateclass as d";
+                var sql = $"select {SchemaName}.mt_immutable_timestamp(d.data ->> \'dateTimeField\') as time from {SchemaName}.mt_doc_dateclass as d";
 
                 using (var reader = session.Connection.CreateCommand().Sql(sql).ExecuteReader())
                 {
@@ -155,7 +159,7 @@ namespace Marten.Testing.Bugs
 
                 _output.WriteLine(cmd.CommandText);
 
-                var sql = "select public.mt_immutable_timestamp(d.data ->> \'date_time_field\') as time from public.mt_doc_dateclass as d";
+                var sql = $"select {SchemaName}.mt_immutable_timestamp(d.data ->> \'date_time_field\') as time from {SchemaName}.mt_doc_dateclass as d";
 
                 using (var reader = session.Connection.CreateCommand().Sql(sql).ExecuteReader())
                 {

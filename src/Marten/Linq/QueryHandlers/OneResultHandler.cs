@@ -2,49 +2,49 @@ using System;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
-using Marten.Linq.Model;
-using Marten.Services;
+using Marten.Internal;
+using Marten.Internal.CodeGeneration;
+using Marten.Linq.Selectors;
+using Marten.Linq.SqlGeneration;
 using Marten.Util;
-using Npgsql;
 
 namespace Marten.Linq.QueryHandlers
 {
-    public class OneResultHandler<T> : IQueryHandler<T>
+    public class OneResultHandler<T>: IQueryHandler<T>, IMaybeStatefulHandler
     {
         private const string NoElementsMessage = "Sequence contains no elements";
         private const string MoreThanOneElementMessage = "Sequence contains more than one element";
         private readonly bool _canBeMultiples;
         private readonly bool _canBeNull;
-        private readonly LinqQuery<T> _linqQuery;
-        private readonly int _rowLimit;
+        private readonly ISelector<T> _selector;
+        private readonly Statement _statement;
 
-        public OneResultHandler(int rowLimit, LinqQuery<T> linqQuery,
+        public OneResultHandler(Statement statement, ISelector<T> selector,
             bool canBeNull = true, bool canBeMultiples = true)
         {
-            _rowLimit = rowLimit;
-            _linqQuery = linqQuery;
+            _statement = statement;
+            _selector = selector;
             _canBeNull = canBeNull;
             _canBeMultiples = canBeMultiples;
         }
 
-        public Type SourceType => _linqQuery.SourceType;
-
-        public void ConfigureCommand(CommandBuilder builder)
+        public void ConfigureCommand(CommandBuilder builder, IMartenSession session)
         {
-            _linqQuery.ConfigureCommand(builder, _rowLimit);
+            _statement.Configure(builder);
         }
 
-        public T Handle(DbDataReader reader, IIdentityMap map, QueryStatistics stats)
+        public T Handle(DbDataReader reader, IMartenSession session)
         {
             var hasResult = reader.Read();
             if (!hasResult)
             {
-                if (_canBeNull) return default(T);
+                if (_canBeNull)
+                    return default;
 
                 throw new InvalidOperationException(NoElementsMessage);
             }
 
-            var result = _linqQuery.Selector.Resolve(reader, map, stats);
+            var result = _selector.Resolve(reader);
 
             if (!_canBeMultiples && reader.Read())
                 throw new InvalidOperationException(MoreThanOneElementMessage);
@@ -52,17 +52,19 @@ namespace Marten.Linq.QueryHandlers
             return result;
         }
 
-        public async Task<T> HandleAsync(DbDataReader reader, IIdentityMap map, QueryStatistics stats, CancellationToken token)
+        public async Task<T> HandleAsync(DbDataReader reader, IMartenSession session,
+            CancellationToken token)
         {
             var hasResult = await reader.ReadAsync(token).ConfigureAwait(false);
             if (!hasResult)
             {
-                if (_canBeNull) return default(T);
+                if (_canBeNull)
+                    return default;
 
                 throw new InvalidOperationException(NoElementsMessage);
             }
 
-            var result = await _linqQuery.Selector.ResolveAsync(reader, map, stats, token).ConfigureAwait(false);
+            var result = await _selector.ResolveAsync(reader, token).ConfigureAwait(false);
 
             if (!_canBeMultiples && await reader.ReadAsync(token).ConfigureAwait(false))
                 throw new InvalidOperationException(MoreThanOneElementMessage);
@@ -70,24 +72,17 @@ namespace Marten.Linq.QueryHandlers
             return result;
         }
 
-        public static IQueryHandler<T> Single(LinqQuery<T> query)
+        public bool DependsOnDocumentSelector()
         {
-            return new OneResultHandler<T>(2, query, false, false);
+            // There will be from dynamic codegen
+            // ReSharper disable once SuspiciousTypeConversion.Global
+            return _selector is IDocumentSelector;
         }
 
-        public static IQueryHandler<T> SingleOrDefault(LinqQuery<T> query)
+        public IQueryHandler CloneForSession(IMartenSession session, QueryStatistics statistics)
         {
-            return new OneResultHandler<T>(2, query, true, false);
-        }
-
-        public static IQueryHandler<T> First(LinqQuery<T> query)
-        {
-            return new OneResultHandler<T>(1, query, false, true);
-        }
-
-        public static IQueryHandler<T> FirstOrDefault(LinqQuery<T> query)
-        {
-            return new OneResultHandler<T>(1, query, true, true);
+            var selector = (ISelector<T>)session.StorageFor<T>().BuildSelector(session);
+            return new OneResultHandler<T>(null, selector, _canBeNull, _canBeMultiples);
         }
     }
 }

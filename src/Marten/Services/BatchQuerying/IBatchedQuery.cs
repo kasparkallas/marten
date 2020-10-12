@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -17,8 +17,7 @@ namespace Marten.Services.BatchQuerying
         /// <param name="version"></param>
         /// <param name="timestamp"></param>
         /// <returns></returns>
-        Task<T> AggregateStream<T>(Guid streamId, int version = 0, DateTime? timestamp = null) where T : class, new();
-
+        Task<T> AggregateStream<T>(Guid streamId, int version = 0, DateTime? timestamp = null) where T : class;
 
         /// <summary>
         /// Load a single event with all of its metadata
@@ -27,14 +26,12 @@ namespace Marten.Services.BatchQuerying
         /// <returns></returns>
         Task<IEvent> Load(Guid id);
 
-
         /// <summary>
         /// Load the high level metadata about a single event stream
         /// </summary>
         /// <param name="streamId"></param>
         /// <returns></returns>
         Task<StreamState> FetchStreamState(Guid streamId);
-
 
         /// <summary>
         /// Fetch all the events for a single event stream
@@ -67,7 +64,23 @@ namespace Marten.Services.BatchQuerying
         /// <typeparam name="T"></typeparam>
         /// <param name="id"></param>
         /// <returns></returns>
-        Task<T> Load<T>(ValueType id) where T : class;
+        Task<T> Load<T>(int id) where T : class;
+
+        /// <summary>
+        /// Load a single document of Type "T" by id
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        Task<T> Load<T>(long id) where T : class;
+
+        /// <summary>
+        /// Load a single document of Type "T" by id
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="id"></param>
+        /// <returns></returns>
+        Task<T> Load<T>(Guid id) where T : class;
 
         /// <summary>
         /// Load a one or more documents of Type "T" by id's
@@ -92,8 +105,6 @@ namespace Marten.Services.BatchQuerying
         /// <returns></returns>
         Task Execute(CancellationToken token = default(CancellationToken));
 
-
-
         /// <summary>
         /// Where for documents of type "T" by Linq expression
         /// </summary>
@@ -109,7 +120,6 @@ namespace Marten.Services.BatchQuerying
         /// <param name="query"></param>
         /// <returns></returns>
         Task<TResult> Query<TDoc, TResult>(ICompiledQuery<TDoc, TResult> query);
-
 
         void ExecuteSynchronously();
     }

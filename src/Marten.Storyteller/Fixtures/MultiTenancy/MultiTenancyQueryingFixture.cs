@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
@@ -6,12 +6,13 @@ using Marten.Linq;
 using Marten.Linq.SoftDeletes;
 using Marten.Testing;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using StoryTeller;
 using StoryTeller.Grammars.Tables;
 
 namespace Marten.Storyteller.Fixtures.MultiTenancy
 {
-    public class ConfigureDocumentStoreFixture : Fixture
+    public class ConfigureDocumentStoreFixture: Fixture
     {
         private StoreOptions _options;
 
@@ -48,7 +49,7 @@ namespace Marten.Storyteller.Fixtures.MultiTenancy
         }
     }
 
-    public class MultiTenancyQueryingFixture : Fixture
+    public class MultiTenancyQueryingFixture: Fixture
     {
         private DocumentStore _store;
 
@@ -78,7 +79,7 @@ namespace Marten.Storyteller.Fixtures.MultiTenancy
 
         [ExposeAsTable("If the users are")]
         public void TheUsersAre(
-            [Header("Tenant Id")] string tenant, 
+            [Header("Tenant Id")] string tenant,
             string UserName,
             [SelectionList("UserTypes")] string UserType)
         {
@@ -86,15 +87,15 @@ namespace Marten.Storyteller.Fixtures.MultiTenancy
             switch (UserType)
             {
                 case "User":
-                    user = new User {UserName = UserName};
+                    user = new User { UserName = UserName };
                     break;
 
                 case "AdminUser":
-                    user = new AdminUser {UserName = UserName};
+                    user = new AdminUser { UserName = UserName };
                     break;
 
                 case "SuperUser":
-                    user = new SuperUser {UserName = UserName};
+                    user = new SuperUser { UserName = UserName };
                     break;
             }
 
@@ -174,9 +175,8 @@ namespace Marten.Storyteller.Fixtures.MultiTenancy
         }
 
         [ExposeAsTable("Running Queries")]
-        public string[] Querying([Header("Tenant Id")] string tenant, 
-            
-            
+        public string[] Querying([Header("Tenant Id")] string tenant,
+
             [SelectionValues("All Users", "Admin Users", "All User Names starting with 'A'", "Admin User Names starting with 'A'", "All Deleted Users", "Deleted Admin Users", "User names starting with 'A' via compiled query")]string Query)
         {
             using (var session = _store.OpenSession(tenant))
@@ -210,9 +210,9 @@ namespace Marten.Storyteller.Fixtures.MultiTenancy
         }
     }
 
-    public class UserNameStartsWithA : ICompiledListQuery<User, string>
+    public class UserNameStartsWithA: ICompiledListQuery<User, string>
     {
-        Expression<Func<IQueryable<User>, IEnumerable<string>>> ICompiledQuery<User, IEnumerable<string>>.QueryIs()
+        Expression<Func<IMartenQueryable<User>, IEnumerable<string>>> ICompiledQuery<User, IEnumerable<string>>.QueryIs()
         {
             return query => query.Where(x => x.UserName.StartsWith("A")).Select(x => x.UserName);
         }

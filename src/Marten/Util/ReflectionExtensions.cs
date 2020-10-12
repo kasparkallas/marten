@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -42,10 +42,75 @@ namespace Marten.Util
         {
             Type rawType = null;
 
-            if (member is FieldInfo) rawType = member.As<FieldInfo>().FieldType;
-            if (member is PropertyInfo) rawType = member.As<PropertyInfo>().PropertyType;
+            if (member is FieldInfo)
+                rawType = member.As<FieldInfo>().FieldType;
+            if (member is PropertyInfo)
+                rawType = member.As<PropertyInfo>().PropertyType;
 
             return rawType.IsNullable() ? rawType.GetInnerTypeFromNullable() : rawType;
+        }
+
+        public static Type GetRawMemberType(this MemberInfo member)
+        {
+            Type rawType = null;
+
+            if (member is FieldInfo)
+                rawType = member.As<FieldInfo>().FieldType;
+            if (member is PropertyInfo)
+                rawType = member.As<PropertyInfo>().PropertyType;
+
+            return rawType;
+        }
+
+        public static MemberInfo GetPublicPropertyOrField(this Type type, string memberName)
+        {
+            return type.GetPublicMembersFromTypeHierarchy(
+                BindingFlags.GetProperty | BindingFlags.GetField
+            ).Cast<MemberInfo>().FirstOrDefault(p => p.Name == memberName);
+        }
+
+        public static MemberInfo[] GetPublicMembersFromTypeHierarchy(this Type type, BindingFlags bindingFlags)
+        {
+            if (!type.IsInterface)
+            {
+                return type.GetMembers(
+                    bindingFlags
+                    | BindingFlags.FlattenHierarchy
+                    | BindingFlags.Public
+                    | BindingFlags.Instance);
+            }
+
+            var memberInfos = new List<MemberInfo>();
+
+            var considered = new List<Type>();
+            var queue = new Queue<Type>();
+            considered.Add(type);
+            queue.Enqueue(type);
+            while (queue.Count > 0)
+            {
+                var subType = queue.Dequeue();
+                foreach (var subInterface in subType.GetInterfaces())
+                {
+                    if (considered.Contains(subInterface))
+                        continue;
+
+                    considered.Add(subInterface);
+                    queue.Enqueue(subInterface);
+                }
+
+                var typeProperties = subType.GetMembers(
+                    bindingFlags
+                    | BindingFlags.FlattenHierarchy
+                    | BindingFlags.Public
+                    | BindingFlags.Instance);
+
+                var newPropertyInfos = typeProperties
+                    .Where(x => !memberInfos.Contains(x));
+
+                memberInfos.InsertRange(0, newPropertyInfos);
+            }
+
+            return memberInfos.ToArray();
         }
 
         public static string GetPrettyName(this Type t)
@@ -67,7 +132,8 @@ namespace Marten.Util
         {
             var typeName = type.Name;
 
-            if (type.GetTypeInfo().IsGenericType) typeName = GetPrettyName(type);
+            if (type.GetTypeInfo().IsGenericType)
+                typeName = GetPrettyName(type);
 
             return type.IsNested
                 ? $"{type.DeclaringType.Name}.{typeName}"
@@ -95,72 +161,5 @@ namespace Marten.Util
             return instance.GetType().Namespace == null;
         }
 
-
-        /// <summary>
-        ///     Derives the full type name *as it would appear in C# code*
-        /// </summary>
-        /// <param name="type"></param>
-        /// <returns></returns>
-        internal static string FullNameInCode(this Type type)
-        {
-            if (Aliases.ContainsKey(type)) return Aliases[type];
-
-            if (type.IsGenericType && !type.IsGenericTypeDefinition)
-            {
-                var cleanName = type.Name.Split('`').First();
-                if (type.IsNested) cleanName = $"{type.ReflectedType.NameInCode()}.{cleanName}";
-
-                var args = type.GetGenericArguments().Select(x => x.FullNameInCode()).Join(", ");
-
-                return $"{type.Namespace}.{cleanName}<{args}>";
-            }
-
-            if (type.FullName == null) return type.Name;
-
-            return type.FullName.Replace("+", ".");
-        }
-
-        /// <summary>
-        ///     Derives the type name *as it would appear in C# code*
-        /// </summary>
-        /// <param name="type"></param>
-        /// <returns></returns>
-        internal static string NameInCode(this Type type)
-        {
-            if (Aliases.ContainsKey(type)) return Aliases[type];
-
-            if (type.IsGenericType && !type.IsGenericTypeDefinition)
-            {
-                var cleanName = type.Name.Split('`').First().Replace("+", ".");
-                if (type.IsNested) cleanName = $"{type.ReflectedType.NameInCode()}.{cleanName}";
-
-                var args = type.GetGenericArguments().Select(x => x.FullNameInCode()).Join(", ");
-
-                return $"{cleanName}<{args}>";
-            }
-
-            if (type.MemberType == MemberTypes.NestedType) return $"{type.ReflectedType.NameInCode()}.{type.Name}";
-
-            return type.Name.Replace("+", ".");
-        }
-
-        internal static string ShortNameInCode(this Type type)
-        {
-            if (Aliases.ContainsKey(type)) return Aliases[type];
-
-            if (type.IsGenericType && !type.IsGenericTypeDefinition)
-            {
-                var cleanName = type.Name.Split('`').First().Replace("+", ".");
-                if (type.IsNested) cleanName = $"{type.ReflectedType.NameInCode()}.{cleanName}";
-
-                var args = type.GetGenericArguments().Select(x => x.ShortNameInCode()).Join(", ");
-
-                return $"{cleanName}<{args}>";
-            }
-
-            if (type.MemberType == MemberTypes.NestedType) return $"{type.ReflectedType.NameInCode()}.{type.Name}";
-
-            return type.Name.Replace("+", ".");
-        }
     }
 }

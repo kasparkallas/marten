@@ -4,18 +4,23 @@ using System.Linq;
 using System.Threading.Tasks;
 using Baseline;
 using Marten.Testing.CodeTracker;
+using Marten.Testing.Harness;
 using Shouldly;
+using Xunit;
 
 namespace Marten.Testing.AsyncDaemon
 {
-    public class AsyncDaemonTestHelper : IDisposable
+
+    public class AsyncDaemonTestHelper: IDisposable
     {
         private readonly IDocumentStore _store;
 
         public AsyncDaemonTestHelper()
         {
-            _store = TestingDocumentStore.For(_ =>
+            _store = DocumentStore.For(_ =>
             {
+                _.Connection(ConnectionSource.ConnectionString);
+                _.AutoCreateSchemaObjects = AutoCreate.All;
                 _.DatabaseSchemaName = "expected";
                 _.Events.DatabaseSchemaName = "expected";
 
@@ -129,7 +134,6 @@ namespace Marten.Testing.AsyncDaemon
                 }
             });
 
-
             if (list.Any())
             {
                 throw new Exception($"Differences in ActiveProjects:\n{list.Join("\n")}");
@@ -142,7 +146,6 @@ namespace Marten.Testing.AsyncDaemon
                 Console.WriteLine("All ActiveProject views match!");
                 Console.WriteLine("==============================");
             }
-
         }
 
         public void Dispose()

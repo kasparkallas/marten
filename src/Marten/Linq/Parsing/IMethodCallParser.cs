@@ -1,4 +1,6 @@
 using System.Linq.Expressions;
+using Marten.Linq.Fields;
+using Marten.Linq.SqlGeneration;
 using Marten.Schema;
 
 namespace Marten.Linq.Parsing
@@ -21,7 +23,7 @@ namespace Marten.Linq.Parsing
         bool Matches(MethodCallExpression expression);
 
         /// <summary>
-        /// Creates an IWhereFragment object that Marten
+        /// Creates an ISqlFragment object that Marten
         /// uses to help construct the underlying Sql
         /// command
         /// </summary>
@@ -29,7 +31,9 @@ namespace Marten.Linq.Parsing
         /// <param name="serializer"></param>
         /// <param name="expression"></param>
         /// <returns></returns>
-        IWhereFragment Parse(IQueryableDocument mapping, ISerializer serializer, MethodCallExpression expression);
+        // TODO -- eliminate serializer as a call here
+        ISqlFragment Parse(IFieldMapping mapping, ISerializer serializer, MethodCallExpression expression);
     }
+
     // ENDSAMPLE
 }

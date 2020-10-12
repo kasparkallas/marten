@@ -1,11 +1,11 @@
-﻿using System.Linq;
-using Marten.Services.Includes;
+using System.Linq;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_634_include_against_soft_deleted_docs : IntegratedFixture
+    public class Bug_634_include_against_soft_deleted_docs: BugIntegrationContext
     {
         public Bug_634_include_against_soft_deleted_docs()
         {
@@ -71,7 +71,7 @@ namespace Marten.Testing.Bugs
                 User expected = null;
 
                 var issues = query.Query<Issue>()
-                    .Include<User>(x => x.AssigneeId, i => expected = i, JoinType.LeftOuter)
+                    .Include<User>(x => x.AssigneeId, i => expected = i)
                     .Where(x => x.Id == issue.Id)
                     .ToList();
 
@@ -79,6 +79,4 @@ namespace Marten.Testing.Bugs
             }
         }
     }
-
-    
 }

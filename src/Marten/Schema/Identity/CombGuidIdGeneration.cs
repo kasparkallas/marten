@@ -1,24 +1,31 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
-using Marten.Storage;
+using LamarCodeGeneration;
+using LamarCodeGeneration.Frames;
 
 namespace Marten.Schema.Identity
 {
     /// <summary>
     ///     Comb Guid Id Generation. More info http://www.informit.com/articles/article.aspx?p=25862
     /// </summary>
-    public class CombGuidIdGeneration : IIdGeneration
+    public class CombGuidIdGeneration: IIdGeneration
     {
         private const int NumDateBytes = 6;
 
-        public IEnumerable<Type> KeyTypes { get; } = new[] {typeof(Guid)};
+        public IEnumerable<Type> KeyTypes { get; } = new[] { typeof(Guid) };
 
         public IIdGenerator<T> Build<T>()
         {
-            return (IIdGenerator<T>) new GuidIdGenerator(() => Create(Guid.NewGuid(), DateTime.UtcNow));
+            return (IIdGenerator<T>)new GuidIdGenerator(() => Create(Guid.NewGuid(), DateTime.UtcNow));
         }
 
         public bool RequiresSequences { get; } = false;
+        public void GenerateCode(GeneratedMethod method, DocumentMapping mapping)
+        {
+            var document = new Use(mapping.DocumentType);
+            method.Frames.Code($"if ({{0}}.{mapping.IdMember.Name} == Guid.Empty) _setter({{0}}, {typeof(CombGuidIdGeneration).FullNameInCode()}.NewGuid());", document);
+            method.Frames.Code($"return {{0}}.{mapping.IdMember.Name};", document);
+        }
 
         /*
             FROM: https://github.com/richardtallent/RT.Comb/blob/master/RT.Comb/RT.CombByteOrder.Comb.cs

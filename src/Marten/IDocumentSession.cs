@@ -1,19 +1,21 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq.Expressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Marten.Events;
+using Marten.Internal.Operations;
 using Marten.Linq;
+using Marten.Linq.SqlGeneration;
 using Marten.Patching;
 using Marten.Services;
 
 namespace Marten
 {
     /// <summary>
-    /// Interface for querying a document database and unit of work updates 
+    /// Interface for querying a document database and unit of work updates
     /// </summary>
-    public interface IDocumentSession : IQuerySession
+    public interface IDocumentSession: IQuerySession
     {
         /// <summary>
         /// Mark this entity for deletion upon the next call to SaveChanges()
@@ -57,7 +59,6 @@ namespace Marten
         /// <param name="expression"></param>
         void DeleteWhere<T>(Expression<Func<T, bool>> expression);
 
-
         /// <summary>
         /// Saves all the pending changes and deletions to the server in a single Postgresql transaction.
         /// </summary>
@@ -68,18 +69,32 @@ namespace Marten
         /// </summary>
         /// <param name="token"></param>
         /// <returns></returns>
-        Task SaveChangesAsync(CancellationToken token = default(CancellationToken));
-
+        Task SaveChangesAsync(CancellationToken token = default);
 
         /// <summary>
-        /// Explicitly marks a document as needing to be inserted or updated upon the next call to SaveChanges()
+        /// Explicitly marks multiple documents as needing to be inserted or updated upon the next call to SaveChanges()
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="entity"></param>
+        void Store<T>(IEnumerable<T> entities);
+
+        /// <summary>
+        /// Explicitly marks one or more documents as needing to be inserted or updated upon the next call to SaveChanges()
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="entity"></param>
         void Store<T>(params T[] entities);
 
         /// <summary>
-        /// Explicitly marks a document as needing to be inserted or updated upon the next call to SaveChanges()
+        /// Explicitly marks multiple documents as needing to be inserted or updated upon the next call to SaveChanges()
+        /// to a specific tenant
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="entity"></param>
+        void Store<T>(string tenantId, IEnumerable<T> entities);
+
+        /// <summary>
+        /// Explicitly marks one or more documents as needing to be inserted or updated upon the next call to SaveChanges()
         /// to a specific tenant
         /// </summary>
         /// <typeparam name="T"></typeparam>
@@ -101,7 +116,23 @@ namespace Marten
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="entity"></param>
+        void Insert<T>(IEnumerable<T> entities);
+
+        /// <summary>
+        /// Explicitly marks a document as needing to be inserted upon the next call to SaveChanges().
+        /// Will throw an exception if the document already exists
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="entity"></param>
         void Insert<T>(params T[] entities);
+
+        /// <summary>
+        /// Explicitly marks a document as needing to be updated upon the next call to SaveChanges().
+        /// Will throw an exception if the document does not already exists
+        /// </summary>
+        /// <typeparam name="T"></typeparam>
+        /// <param name="entity"></param>
+        void Update<T>(IEnumerable<T> entities);
 
         /// <summary>
         /// Explicitly marks a document as needing to be updated upon the next call to SaveChanges().
@@ -118,8 +149,6 @@ namespace Marten
         /// <param name="documents"></param>
         void InsertObjects(IEnumerable<object> documents);
 
-
-
         /// <summary>
         /// List of all the pending changes to this IDocumentSession
         /// </summary>
@@ -130,8 +159,6 @@ namespace Marten
         /// </summary>
         /// <param name="documents"></param>
         void StoreObjects(IEnumerable<object> documents);
-
-
 
         /// <summary>
         /// Access to the event store functionality
@@ -147,7 +174,6 @@ namespace Marten
         /// Writeable list of the listeners for this session
         /// </summary>
         IList<IDocumentSessionListener> Listeners { get; }
-
 
         /// <summary>
         /// Patch a single document of type T with the given id
@@ -196,7 +222,7 @@ namespace Marten
         /// <typeparam name="T"></typeparam>
         /// <param name="fragment"></param>
         /// <returns></returns>
-        IPatchExpression<T> Patch<T>(IWhereFragment fragment);
+        IPatchExpression<T> Patch<T>(ISqlFragment fragment);
 
         /// <summary>
         /// Catch all mechanism to add additional database calls to the batched
@@ -204,7 +230,6 @@ namespace Marten
         /// </summary>
         /// <param name="storageOperation"></param>
         void QueueOperation(IStorageOperation storageOperation);
-
 
         /// <summary>
         /// Completely remove the document from this session's unit of work tracking and identity map caching
@@ -254,6 +279,6 @@ namespace Marten
         /// <param name="keys"></param>
         /// <param name="token"></param>
         /// <returns></returns>
-        Task<IReadOnlyList<TDoc>> ByIdAsync<TKey>(IEnumerable<TKey> keys, CancellationToken token = default(CancellationToken));
+        Task<IReadOnlyList<TDoc>> ByIdAsync<TKey>(IEnumerable<TKey> keys, CancellationToken token = default);
     }
 }

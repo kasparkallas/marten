@@ -1,10 +1,12 @@
-﻿using System.Linq;
+using System.Linq;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_621_bulk_insert_with_optimistic_concurrency : IntegratedFixture
+    public class Bug_621_bulk_insert_with_optimistic_concurrency: BugIntegrationContext
     {
         [Fact]
         public void can_do_a_bulk_insert()
@@ -23,5 +25,6 @@ namespace Marten.Testing.Bugs
                 query.Query<Target>().Count().ShouldBe(1000);
             }
         }
+
     }
 }

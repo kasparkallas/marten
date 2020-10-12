@@ -1,14 +1,18 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading.Tasks;
+using Baseline.Dates;
 using Marten.Events.Projections;
+using Marten.Events.Projections.Async;
 using Marten.Services;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events.Projections
 {
-    public class project_events_from_multiple_streams_into_view : DocumentSessionFixture<IdentityMap>
+    public class project_events_from_multiple_streams_into_view: IntegrationContext
     {
         private static readonly Guid streamId = Guid.NewGuid();
         private static readonly Guid streamId2 = Guid.NewGuid();
@@ -34,7 +38,7 @@ namespace Marten.Testing.Events.Projections
                 _.Events.TenancyStyle = Marten.Storage.TenancyStyle.Conjoined;
                 _.Events.InlineProjections.AggregateStreamsWith<QuestParty>();
                 _.Events.ProjectView<PersistedView, Guid>()
-                    .ProjectEvent<ProjectionEvent<QuestStarted>>((view, @event) => { view.Events.Add(@event.Data);  view.StreamIdsForEvents.Add(@event.StreamId); })
+                    .ProjectEvent<ProjectionEvent<QuestStarted>>((view, @event) => { view.Events.Add(@event.Data); view.StreamIdsForEvents.Add(@event.StreamId); })
                     .ProjectEvent<MembersJoined>(e => e.QuestId, (view, @event) => view.Events.Add(@event))
                     .ProjectEvent<ProjectionEvent<MonsterSlayed>>(e => e.Data.QuestId, (view, @event) => { view.Events.Add(@event.Data); view.StreamIdsForEvents.Add(@event.StreamId); })
                     .DeleteEvent<QuestEnded>()
@@ -58,7 +62,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, ended);
             theSession.SaveChanges();
             var nullDocument = theSession.Load<PersistedView>(streamId);
-            nullDocument.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument);
 
             // Add document back to so we can delete it by selector
             theSession.Events.Append(streamId, started);
@@ -69,7 +73,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, departed);
             theSession.SaveChanges();
             var nullDocument2 = theSession.Load<PersistedView>(streamId);
-            nullDocument2.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument2);
 
             // Add document back to so we can delete it by other selector type
             theSession.Events.Append(streamId, started);
@@ -80,7 +84,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, destroyed);
             theSession.SaveChanges();
             var nullDocument3 = theSession.Load<PersistedView>(streamId);
-            nullDocument3.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument3);
 
             // Add document back to see if we can project stream ids from event handlers (Applies to other IEvent properties)
             theSession.Events.Append(streamId, started, joined);
@@ -95,7 +99,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, ended);
             theSession.SaveChanges();
             var nullDocument4 = theSession.Load<PersistedView>(streamId);
-            nullDocument4.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument4);
         }
 
         [Fact]
@@ -132,7 +136,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, ended);
             await theSession.SaveChangesAsync();
             var nullDocument = theSession.Load<PersistedView>(streamId);
-            nullDocument.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument);
 
             // Add document back to so we can delete it by selector
             theSession.Events.Append(streamId, started);
@@ -143,7 +147,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, departed);
             await theSession.SaveChangesAsync();
             var nullDocument2 = theSession.Load<PersistedView>(streamId);
-            nullDocument2.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument2);
 
             // Add document back to so we can delete it by other selector type
             theSession.Events.Append(streamId, started);
@@ -154,7 +158,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, destroyed);
             await theSession.SaveChangesAsync();
             var nullDocument3 = theSession.Load<PersistedView>(streamId);
-            nullDocument3.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument3);
 
             // Add document back to see if we can project stream ids from event handlers (Applies to other IEvent properties)
             theSession.Events.Append(streamId, started, joined);
@@ -169,7 +173,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, ended);
             await theSession.SaveChangesAsync();
             var nullDocument4 = theSession.Load<PersistedView>(streamId);
-            nullDocument4.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument4);
         }
 
         [Fact]
@@ -198,7 +202,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, ended);
             theSession.SaveChanges();
             var nullDocument = theSession.Load<PersistedView>(streamId);
-            nullDocument.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument);
 
             // Add document back to so we can delete it by selector
             theSession.Events.Append(streamId, started);
@@ -209,7 +213,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, departed);
             theSession.SaveChanges();
             var nullDocument2 = theSession.Load<PersistedView>(streamId);
-            nullDocument2.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument2);
 
             // Add document back to so we can delete it by other selector type
             theSession.Events.Append(streamId, started);
@@ -220,7 +224,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, destroyed);
             theSession.SaveChanges();
             var nullDocument3 = theSession.Load<PersistedView>(streamId);
-            nullDocument3.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument3);
         }
 
         [Fact]
@@ -249,7 +253,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, ended);
             await theSession.SaveChangesAsync();
             var nullDocument = theSession.Load<PersistedView>(streamId);
-            nullDocument.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument);
 
             // Add document back to so we can delete it by selector
             theSession.Events.Append(streamId, started);
@@ -260,7 +264,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, departed);
             await theSession.SaveChangesAsync();
             var nullDocument2 = theSession.Load<PersistedView>(streamId);
-            nullDocument2.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument2);
 
             // Add document back to so we can delete it by other selector type
             theSession.Events.Append(streamId, started);
@@ -271,7 +275,7 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.Append(streamId, destroyed);
             await theSession.SaveChangesAsync();
             var nullDocument3 = theSession.Load<PersistedView>(streamId);
-            nullDocument3.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument3);
         }
 
         [Fact]
@@ -295,17 +299,17 @@ namespace Marten.Testing.Events.Projections
             theSession.SaveChanges();
 
             var document = theSession.Load<QuestView>(streamId);
-            document.Name.ShouldStartWith(monsterQuestsAdded.Name);
+            SpecificationExtensions.ShouldStartWith(document.Name, monsterQuestsAdded.Name);
             var document2 = theSession.Load<QuestView>(streamId2);
-            document2.Name.ShouldStartWith(monsterQuestsAdded.Name);
+            SpecificationExtensions.ShouldStartWith(document2.Name, monsterQuestsAdded.Name);
 
             theSession.Events.StartStream<Monster>(monsterQuestsRemoved);
             theSession.SaveChanges();
 
             var nullDocument = theSession.Load<QuestView>(streamId);
-            nullDocument.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument);
             var nullDocument2 = theSession.Load<QuestView>(streamId2);
-            nullDocument2.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument2);
         }
 
         [Fact]
@@ -329,17 +333,17 @@ namespace Marten.Testing.Events.Projections
             await theSession.SaveChangesAsync();
 
             var document = theSession.Load<QuestView>(streamId);
-            document.Name.ShouldStartWith(monsterQuestsAdded.Name);
+            SpecificationExtensions.ShouldStartWith(document.Name, monsterQuestsAdded.Name);
             var document2 = theSession.Load<QuestView>(streamId2);
-            document2.Name.ShouldStartWith(monsterQuestsAdded.Name);
+            SpecificationExtensions.ShouldStartWith(document2.Name, monsterQuestsAdded.Name);
 
             theSession.Events.StartStream<Monster>(monsterQuestsRemoved);
             await theSession.SaveChangesAsync();
 
             var nullDocument = theSession.Load<QuestView>(streamId);
-            nullDocument.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument);
             var nullDocument2 = theSession.Load<QuestView>(streamId2);
-            nullDocument2.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(nullDocument2);
         }
 
         [Fact]
@@ -361,20 +365,123 @@ namespace Marten.Testing.Events.Projections
             theSession.Events.StartStream<QuestParty>(streamId, started);
             theSession.SaveChanges();
 
-            var docoument = await theSession.LoadAsync<PersistedView>(streamId);
-            docoument.Events.Count.ShouldBe(1);
+            var document = await theSession.LoadAsync<PersistedView>(streamId);
+            document.Events.Count.ShouldBe(1);
 
             theSession.Events.StartStream<Monster>(slayed1);
             theSession.SaveChanges();
 
-            var docoument2 = await theSession.LoadAsync<PersistedView>(streamId);
-            docoument2.Events.Count.ShouldBe(1);
+            var document2 = await theSession.LoadAsync<PersistedView>(streamId);
+            document2.Events.Count.ShouldBe(1);
 
             theSession.Events.StartStream<QuestParty>(joined);
             theSession.SaveChanges();
 
-            var docoument3 = await theSession.LoadAsync<PersistedView>(streamId);
-            docoument3.Events.Count.ShouldBe(2);
+            var document3 = await theSession.LoadAsync<PersistedView>(streamId);
+            document3.Events.Count.ShouldBe(2);
+        }
+
+        [Fact]
+        public async Task updateonly_event_for_custom_view_projection_should_not_create_new_document()
+        {
+            StoreOptions(_ =>
+            {
+                _.AutoCreateSchemaObjects = AutoCreate.All;
+                _.Events.TenancyStyle = Marten.Storage.TenancyStyle.Conjoined;
+                _.Events.InlineProjections.Add<NewsletterSubscriptionProjection>();
+            });
+
+            var subscriptionId = Guid.NewGuid();
+            var newsletterId = Guid.NewGuid();
+            var readerId = Guid.NewGuid();
+
+            var readerSubscribed = new ReaderSubscribed(subscriptionId, newsletterId, readerId, "John Doe");
+            theSession.Events.StartStream<NewsletterSubscription>(streamId, readerSubscribed);
+            await theSession.SaveChangesAsync();
+            var subscription = await theSession.LoadAsync<NewsletterSubscription>(subscriptionId);
+            subscription.ShouldNotBeNull();
+
+            var newsletterOpened = new NewsletterOpened(subscriptionId, DateTime.Now);
+            theSession.Events.Append(subscriptionId, newsletterOpened);
+            await theSession.SaveChangesAsync();
+            subscription = await theSession.LoadAsync<NewsletterSubscription>(subscriptionId);
+            subscription.ShouldNotBeNull();
+
+            var readerUnsubscribed = new ReaderUnsubscribed(subscriptionId);
+            theSession.Events.Append(subscriptionId, readerUnsubscribed);
+            await theSession.SaveChangesAsync();
+            subscription = await theSession.LoadAsync<NewsletterSubscription>(subscriptionId);
+            subscription.ShouldBeNull();
+
+            var newsletterOpenedAfterUnsubscribe = new NewsletterOpened(subscriptionId, DateTime.Now);
+            theSession.Events.Append(subscriptionId, newsletterOpenedAfterUnsubscribe);
+            await theSession.SaveChangesAsync();
+            subscription = await theSession.LoadAsync<NewsletterSubscription>(subscriptionId);
+            subscription.ShouldBeNull();
+        }
+
+        [Fact]
+        public async Task default_id_event_should_not_create_new_document()
+        {
+            StoreOptions(_ =>
+            {
+                _.AutoCreateSchemaObjects = AutoCreate.All;
+                _.Events.TenancyStyle = Marten.Storage.TenancyStyle.Conjoined;
+                _.Events.ProjectView<PersistedView, Guid>()
+                    .ProjectEvent<QuestStarted>(e =>
+                    {
+                        return Guid.Empty;
+                    }, (view, @event) => view.Events.Add(@event));
+            });
+
+            theSession.Events.StartStream<QuestParty>(streamId, started);
+            theSession.SaveChanges();
+
+            var document = await theSession.LoadAsync<PersistedView>(streamId);
+            SpecificationExtensions.ShouldBeNull(document);
+
+            var documentCount = await theSession.Query<PersistedView>().CountAsync();
+            documentCount.ShouldBe(0);
+        }
+
+        [Fact(Skip = "Failing test for #1302")]
+        public async Task projectview_withdeleteevent_should_be_respected_during_projection_rebuild()
+        {
+            StoreOptions(_ =>
+            {
+                _.AutoCreateSchemaObjects = AutoCreate.All;
+                _.Events.InlineProjections.AggregateStreamsWith<Project>();
+                _.Events.ProjectView<Project, Guid>().DeleteEvent<ProjectClosed>();
+            });
+
+            var projectId = Guid.NewGuid();
+
+            theSession.Events.Append(projectId, new ProjectStarted { Id = projectId, Name = "Marten"});
+            await theSession.SaveChangesAsync();
+
+            theSession.Query<Project>().Count().ShouldBe(1);
+
+            theSession.Events.Append(projectId, new ProjectClosed { Id = projectId });
+            await theSession.SaveChangesAsync();
+
+            theSession.Query<Project>().Count().ShouldBe(0);
+
+            var settings = new DaemonSettings
+            {
+                LeadingEdgeBuffer = 0.Seconds()
+            };
+
+            using (var daemon = theStore.BuildProjectionDaemon(new[] {typeof(Project)}, settings: settings))
+            {
+                await daemon.RebuildAll();
+            }
+
+            //fails as user is back in the database after rebuilding
+            theSession.Query<Project>().Count().ShouldBe(0);
+        }
+
+        public project_events_from_multiple_streams_into_view(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 
@@ -392,7 +499,7 @@ namespace Marten.Testing.Events.Projections
     }
 
     // SAMPLE: viewprojection-from-class
-    public class PersistViewProjection : ViewProjection<PersistedView, Guid>
+    public class PersistViewProjection: ViewProjection<PersistedView, Guid>
     {
         public PersistViewProjection()
         {
@@ -411,4 +518,156 @@ namespace Marten.Testing.Events.Projections
     }
 
     // ENDSAMPLE
+
+    // SAMPLE: viewprojection-from-class-with-eventdata
+
+    public class Lap
+    {
+        public Guid Id { get; set; }
+
+        public DateTimeOffset? Start { get; set; }
+
+        public DateTimeOffset? End { get; set; }
+    }
+
+    public class LapStarted
+    {
+        public Guid LapId { get; set; }
+    }
+
+    public class LapFinished
+    {
+        public Guid LapId { get; set; }
+    }
+
+    public class LapViewProjection: ViewProjection<Lap, Guid>
+    {
+        public LapViewProjection()
+        {
+            ProjectEvent<ProjectionEvent<LapStarted>>(e => e.Data.LapId, Persist);
+            ProjectEvent<ProjectionEvent<LapFinished>>(e => e.Data.LapId, Persist);
+        }
+
+        private void Persist(Lap view, ProjectionEvent<LapStarted> eventData)
+        {
+            view.Start = eventData.Timestamp;
+        }
+
+        private void Persist(Lap view, ProjectionEvent<LapFinished> eventData)
+        {
+            view.End = eventData.Timestamp;
+        }
+    }
+
+    // ENDSAMPLE
+
+    // SAMPLE: viewprojection-with-update-only
+
+    public class NewsletterSubscription
+    {
+        public Guid Id { get; set; }
+
+        public Guid NewsletterId { get; set; }
+
+        public Guid ReaderId { get; set; }
+
+        public string FirstName { get; set; }
+
+        public int OpensCount { get; set; }
+    }
+
+    public class ReaderSubscribed
+    {
+        public Guid SubscriptionId { get; }
+
+        public Guid NewsletterId { get; }
+
+        public Guid ReaderId { get; }
+
+        public string FirstName { get; }
+
+        public ReaderSubscribed(Guid subscriptionId, Guid newsletterId, Guid readerId, string firstName)
+        {
+            SubscriptionId = subscriptionId;
+            NewsletterId = newsletterId;
+            ReaderId = readerId;
+            FirstName = firstName;
+        }
+    }
+
+    public class NewsletterOpened
+    {
+        public Guid SubscriptionId { get; }
+
+        public DateTime OpenedAt { get; }
+
+        public NewsletterOpened(Guid subscriptionId, DateTime openedAt)
+        {
+            SubscriptionId = subscriptionId;
+            OpenedAt = openedAt;
+        }
+    }
+
+    public class ReaderUnsubscribed
+    {
+        public Guid SubscriptionId { get; }
+
+        public ReaderUnsubscribed(Guid subscriptionId)
+        {
+            SubscriptionId = subscriptionId;
+        }
+    }
+
+    public class NewsletterSubscriptionProjection : ViewProjection<NewsletterSubscription, Guid>
+    {
+        public NewsletterSubscriptionProjection()
+        {
+            ProjectEvent<ReaderSubscribed>(@event => @event.SubscriptionId, Persist);
+            ProjectEvent<NewsletterOpened>(@event => @event.SubscriptionId, Persist, onlyUpdate: true);
+            DeleteEvent<ReaderUnsubscribed>(@event => @event.SubscriptionId);
+        }
+
+        private void Persist(NewsletterSubscription view, ReaderSubscribed @event)
+        {
+            view.Id = @event.SubscriptionId;
+            view.NewsletterId = @event.NewsletterId;
+            view.ReaderId = @event.ReaderId;
+            view.FirstName = @event.FirstName;
+            view.OpensCount = 0;
+        }
+
+        private void Persist(NewsletterSubscription view, NewsletterOpened @event)
+        {
+            view.OpensCount++;
+        }
+    }
+
+    // ENDSAMPLE
+
+    public class Project
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; }
+
+        public void Apply(ProjectStarted e)
+        {
+            Id = e.Id;
+            Name = e.Name;
+        }
+
+        public void Apply(ProjectClosed e)
+        {
+        }
+    }
+
+    public class ProjectStarted
+    {
+        public Guid Id { get; set; }
+        public string Name { get; set; }
+    }
+
+    public class ProjectClosed
+    {
+        public Guid Id { get; set; }
+    }
 }

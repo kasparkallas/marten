@@ -3,12 +3,15 @@ using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using Baseline;
+using Marten.Linq.Fields;
+using Marten.Linq.Filters;
 using Marten.Linq.Parsing;
+using Marten.Linq.SqlGeneration;
 using Marten.Schema;
 
 namespace Marten.Linq.LastModified
 {
-    public class ModifiedBeforeParser : IMethodCallParser
+    public class ModifiedBeforeParser: IMethodCallParser
     {
         private static readonly MethodInfo _method =
             typeof(LastModifiedExtensions).GetMethod(nameof(LastModifiedExtensions.ModifiedBefore));
@@ -18,11 +21,11 @@ namespace Marten.Linq.LastModified
             return Equals(expression.Method, _method);
         }
 
-        public IWhereFragment Parse(IQueryableDocument mapping, ISerializer serializer, MethodCallExpression expression)
+        public ISqlFragment Parse(IFieldMapping mapping, ISerializer serializer, MethodCallExpression expression)
         {
             var time = expression.Arguments.Last().Value().As<DateTimeOffset>();
 
-            return new WhereFragment($"d.{DocumentMapping.LastModifiedColumn} < ?", time);
+            return new WhereFragment($"d.{SchemaConstants.LastModifiedColumn} < ?", time);
         }
     }
 }

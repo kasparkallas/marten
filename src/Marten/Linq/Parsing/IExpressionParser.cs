@@ -1,4 +1,6 @@
 using System.Linq.Expressions;
+using Marten.Linq.Fields;
+using Marten.Linq.SqlGeneration;
 using Marten.Schema;
 
 namespace Marten.Linq.Parsing
@@ -8,14 +10,14 @@ namespace Marten.Linq.Parsing
         /// <summary>
         /// Can this parser create a Sql where clause
         /// from part of a Linq expression
-        /// </summary>        
+        /// </summary>
         bool Matches(T expression);
 
         /// <summary>
-        /// Creates an IWhereFragment object that Marten
+        /// Creates an ISqlFragment object that Marten
         /// uses to help construct the underlying Sql
         /// command
         /// </summary>
-        IWhereFragment Parse(IQueryableDocument mapping, ISerializer serializer, T expression);
+        ISqlFragment Parse(IFieldMapping mapping, ISerializer serializer, T expression);
     }
 }

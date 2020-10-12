@@ -2,16 +2,16 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Baseline;
-using Marten;
 using Marten.Events;
-using Marten.Testing;
 using Marten.Testing.Events.Projections;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events
 {
-    public class end_to_end_event_capture_and_fetching_the_stream_with_non_typed_streams_Tests
+    [Collection("projections")]
+    public class end_to_end_event_capture_and_fetching_the_stream_with_non_typed_streams_Tests : OneOffConfigurationsContext
     {
         public static TheoryData<DocumentTracking> SessionTypes = new TheoryData<DocumentTracking>
         {
@@ -19,13 +19,15 @@ namespace Marten.Testing.Events
             DocumentTracking.DirtyTracking
         };
 
+        public end_to_end_event_capture_and_fetching_the_stream_with_non_typed_streams_Tests() : base("projections")
+        {
+        }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void capture_events_to_a_new_stream_and_fetch_the_events_back(DocumentTracking sessionType)
         {
             var store = InitStore();
-
 
             using (var session = store.OpenSession(sessionType))
             {
@@ -50,11 +52,10 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public async Task capture_events_to_a_new_stream_and_fetch_the_events_back_async(DocumentTracking sessionType)
         {
             var store = InitStore();
-
 
             using (var session = store.OpenSession(sessionType))
             {
@@ -79,11 +80,10 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public async Task capture_events_to_a_new_stream_and_fetch_the_events_back_async_with_linq(DocumentTracking sessionType)
         {
             var store = InitStore();
-
 
             using (var session = store.OpenSession(sessionType))
             {
@@ -97,7 +97,6 @@ namespace Marten.Testing.Events
 
                 var streamEvents = await Queryable.Where<IEvent>(session.Events.QueryAllRawEvents(), x => x.StreamId == id).OrderBy(x => x.Version).ToListAsync();
 
-
                 streamEvents.Count().ShouldBe(2);
                 streamEvents.ElementAt(0).Data.ShouldBeOfType<MembersJoined>();
                 streamEvents.ElementAt(0).Version.ShouldBe(1);
@@ -109,11 +108,10 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void capture_events_to_a_new_stream_and_fetch_the_events_back_sync_with_linq(DocumentTracking sessionType)
         {
             var store = InitStore();
-
 
             using (var session = store.OpenSession(sessionType))
             {
@@ -127,7 +125,6 @@ namespace Marten.Testing.Events
 
                 var streamEvents = Queryable.Where<IEvent>(session.Events.QueryAllRawEvents(), x => x.StreamId == id).OrderBy(x => x.Version).ToList();
 
-
                 streamEvents.Count().ShouldBe(2);
                 streamEvents.ElementAt(0).Data.ShouldBeOfType<MembersJoined>();
                 streamEvents.ElementAt(0).Version.ShouldBe(1);
@@ -138,10 +135,8 @@ namespace Marten.Testing.Events
             }
         }
 
-
-        [Theory]
-        [MemberData("SessionTypes")]
-        public void live_aggregate_equals_inlined_aggregate_without_hidden_contracts(DocumentTracking sessionType)
+        [Fact]
+        public void live_aggregate_equals_inlined_aggregate_without_hidden_contracts()
         {
             var store = InitStore("event_store");
             var questId = Guid.NewGuid();
@@ -165,9 +160,8 @@ namespace Marten.Testing.Events
             }
         }
 
-        [Theory]
-        [MemberData("SessionTypes")]
-        public void open_persisted_stream_in_new_store_with_same_settings(DocumentTracking sessionType)
+        [Fact]
+        public void open_persisted_stream_in_new_store_with_same_settings()
         {
             var store = InitStore("event_store");
             var questId = Guid.NewGuid();
@@ -221,7 +215,7 @@ namespace Marten.Testing.Events
                 var parties = Enumerable.ToArray<QuestParty>(session.Events.QueryRawEventDataOnly<QuestParty>());
                 foreach (var party in parties)
                 {
-                    party.ShouldNotBeNull();
+                    SpecificationExtensions.ShouldNotBeNull(party);
                 }
             }
             //This AggregateStream fail with NPE
@@ -241,9 +235,8 @@ namespace Marten.Testing.Events
             }
         }
 
-        [Theory]
-        [MemberData("SessionTypes")]
-        public void query_before_saving(DocumentTracking sessionType)
+        [Fact]
+        public void query_before_saving()
         {
             var store = InitStore("event_store");
             var questId = Guid.NewGuid();
@@ -295,7 +288,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void capture_events_to_a_new_stream_and_fetch_the_events_back_with_stream_id_provided(
             DocumentTracking sessionType)
         {
@@ -323,7 +316,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void capture_events_to_a_non_existing_stream_and_fetch_the_events_back(DocumentTracking sessionType)
         {
             var store = InitStore();
@@ -350,7 +343,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void capture_events_to_an_existing_stream_and_fetch_the_events_back(DocumentTracking sessionType)
         {
             var store = InitStore();
@@ -387,7 +380,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void capture_events_to_a_new_stream_and_fetch_the_events_back_in_another_database_schema(
             DocumentTracking sessionType)
         {
@@ -412,7 +405,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void
             capture_events_to_a_new_stream_and_fetch_the_events_back_with_stream_id_provided_in_another_database_schema(
                 DocumentTracking sessionType)
@@ -441,7 +434,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void capture_events_to_a_non_existing_stream_and_fetch_the_events_back_in_another_database_schema(
             DocumentTracking sessionType)
         {
@@ -468,9 +461,8 @@ namespace Marten.Testing.Events
             }
         }
 
-
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void capture_events_to_an_existing_stream_and_fetch_the_events_back_in_another_database_schema(
             DocumentTracking sessionType)
         {
@@ -509,7 +501,7 @@ namespace Marten.Testing.Events
         }
 
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void assert_on_max_event_id_on_event_stream_append(
             DocumentTracking sessionType)
         {
@@ -536,9 +528,8 @@ namespace Marten.Testing.Events
             }
         }
 
-
         [Theory]
-        [MemberData("SessionTypes")]
+        [MemberData(nameof(SessionTypes))]
         public void capture_immutable_events(DocumentTracking sessionType)
         {
             var store = InitStore();
@@ -564,15 +555,13 @@ namespace Marten.Testing.Events
             }
         }
 
-
-
-        private static DocumentStore InitStore(string databascSchema = null, bool cleanShema = true)
+        private DocumentStore InitStore(string databaseSchema = null, bool cleanSchema = true)
         {
-            var store = DocumentStore.For(_ =>
+            var store = StoreOptions(_ =>
             {
-                if (databascSchema != null)
+                if (databaseSchema != null)
                 {
-                    _.Events.DatabaseSchemaName = databascSchema;
+                    _.Events.DatabaseSchemaName = databaseSchema;
                 }
 
                 _.AutoCreateSchemaObjects = AutoCreate.All;
@@ -584,12 +573,8 @@ namespace Marten.Testing.Events
                 _.Events.AddEventType(typeof(MembersJoined));
                 _.Events.AddEventType(typeof(MembersDeparted));
                 _.Events.AddEventType(typeof(QuestStarted));
-            });
+            }, cleanSchema);
 
-            if (cleanShema)
-            {
-                store.Advanced.Clean.CompletelyRemoveAll();
-            }
 
             return store;
         }

@@ -1,7 +1,14 @@
 using System;
 using System.Collections.Generic;
+using System.Data.Common;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
+using Marten.Internal;
+using Marten.Internal.Operations;
+using Marten.Internal.Storage;
 using Marten.Linq;
+using Marten.Linq.SqlGeneration;
 using Marten.Schema;
 using Marten.Schema.Identity;
 using Marten.Services;
@@ -11,41 +18,75 @@ using NpgsqlTypes;
 
 namespace Marten.Patching
 {
-    public class PatchOperation : IStorageOperation, NoDataReturnedCall
+    public class PatchOperation: IStorageOperation, NoDataReturnedCall
     {
-        private readonly IQueryableDocument _document;
-        private readonly IWhereFragment _fragment;
+        private readonly IDocumentStorage _storage;
+        private readonly ISqlFragment _fragment;
         private readonly IDictionary<string, object> _patch;
         private readonly ISerializer _serializer;
         private readonly TransformFunction _transform;
 
-        public PatchOperation(TransformFunction transform, IQueryableDocument document, IWhereFragment fragment,
+        public PatchOperation(TransformFunction transform, IDocumentStorage storage, ISqlFragment fragment,
             IDictionary<string, object> patch, ISerializer serializer)
         {
             _transform = transform;
-            _document = document;
+            _storage = storage;
             _fragment = fragment;
             _patch = patch;
             _serializer = serializer;
         }
 
         // TODO -- come back and do this with a single command!
-        public void ConfigureCommand(CommandBuilder builder)
+        private const string VALUE_LOOKUP = "___VALUE___";
+
+        internal bool PossiblyPolymorhpic { get; set; } = false;
+
+        public void Postprocess(DbDataReader reader, IList<Exception> exceptions)
         {
-            var patchJson = _serializer.ToCleanJson(_patch);
-            var patchParam = builder.AddJsonParameter(patchJson);
+            // Nothing
+        }
+
+        public Task PostprocessAsync(DbDataReader reader, IList<Exception> exceptions, CancellationToken token)
+        {
+            return Task.CompletedTask;
+        }
+
+        public OperationRole Role()
+        {
+            return OperationRole.Patch;
+        }
+
+        public void ConfigureCommand(CommandBuilder builder, IMartenSession session)
+        {
+            var patchParam = builder.AddJsonParameter(_serializer.ToCleanJson(_patch));
+            if (_patch.ContainsKey("value"))
+            {
+                var value = PossiblyPolymorhpic ? _serializer.ToJsonWithTypes(_patch["value"]) : _serializer.ToJson(_patch["value"]);
+                var copy = new Dictionary<string, object>();
+                foreach (var item in _patch)
+                {
+                    copy.Add(item.Key, item.Value);
+                }
+                copy["value"] = VALUE_LOOKUP;
+
+                var patchJson = _serializer.ToJson(copy);
+                var replacedValue = patchJson.Replace($"\"{VALUE_LOOKUP}\"", value);
+
+                patchParam = builder.AddJsonParameter(replacedValue);
+            }
+
             var versionParam = builder.AddParameter(CombGuidIdGeneration.NewGuid(), NpgsqlDbType.Uuid);
 
             builder.Append("update ");
-            builder.Append(_document.Table.QualifiedName);
+            builder.Append(_storage.TableName.QualifiedName);
             builder.Append(" as d set data = ");
             builder.Append(_transform.Identifier.QualifiedName);
             builder.Append("(data, :");
             builder.Append(patchParam.ParameterName);
             builder.Append("), ");
-            builder.Append(DocumentMapping.LastModifiedColumn);
+            builder.Append(SchemaConstants.LastModifiedColumn);
             builder.Append(" = (now() at time zone 'utc'), ");
-            builder.Append(DocumentMapping.VersionColumn);
+            builder.Append(SchemaConstants.VersionColumn);
             builder.Append(" = :");
             builder.Append(versionParam.ParameterName);
 
@@ -63,15 +104,16 @@ namespace Marten.Patching
             applyUpdates(builder, _fragment);
         }
 
-        public Type DocumentType => _document.DocumentType;
+        public Type DocumentType => _storage.DocumentType;
 
-        private void applyUpdates(CommandBuilder builder, IWhereFragment where)
+        private void applyUpdates(CommandBuilder builder, ISqlFragment where)
         {
-            var fields = _document.DuplicatedFields;
-            if (!fields.Any()) return;
+            var fields = _storage.DuplicatedFields;
+            if (!fields.Any())
+                return;
 
             builder.Append(";update ");
-            builder.Append(_document.Table.QualifiedName);
+            builder.Append(_storage.TableName.QualifiedName);
             builder.Append(" as d set ");
 
             builder.Append(fields[0].UpdateSqlFragment());

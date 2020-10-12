@@ -1,9 +1,12 @@
 using System;
 using System.Collections.Generic;
+using LamarCodeGeneration;
+using LamarCodeGeneration.Frames;
+using Marten.Storage;
 
 namespace Marten.Schema.Identity.Sequences
 {
-    public class HiloIdGeneration : IIdGeneration
+    public class HiloIdGeneration: IIdGeneration
     {
         private readonly HiloSettings _hiloSettings;
 
@@ -17,19 +20,34 @@ namespace Marten.Schema.Identity.Sequences
 
         public int MaxLo => _hiloSettings.MaxLo;
 
-        public IEnumerable<Type> KeyTypes { get; } = new[] {typeof(int), typeof(long)};
-
+        public IEnumerable<Type> KeyTypes { get; } = new[] { typeof(int), typeof(long) };
 
         public IIdGenerator<T> Build<T>()
         {
             if (typeof(T) == typeof(int))
             {
-                return (IIdGenerator<T>) new IntHiloGenerator(DocumentType);
+                return (IIdGenerator<T>)new IntHiloGenerator(DocumentType);
             }
 
-            return (IIdGenerator<T>) new LongHiloGenerator(DocumentType);
+            return (IIdGenerator<T>)new LongHiloGenerator(DocumentType);
         }
 
         public bool RequiresSequences { get; } = true;
+        public void GenerateCode(GeneratedMethod method, DocumentMapping mapping)
+        {
+            var document = new Use(mapping.DocumentType);
+
+
+            if (mapping.IdType == typeof(int))
+            {
+                method.Frames.Code($"if ({{0}}.{mapping.IdMember.Name} <= 0) _setter({{0}}, {{1}}.Sequences.SequenceFor({{2}}).NextInt());", document, Use.Type<ITenant>(), mapping.DocumentType);
+            }
+            else
+            {
+                method.Frames.Code($"if ({{0}}.{mapping.IdMember.Name} <= 0) _setter({{0}}, {{1}}.Sequences.SequenceFor({{2}}).NextLong());", document, Use.Type<ITenant>(), mapping.DocumentType);
+            }
+
+            method.Frames.Code($"return {{0}}.{mapping.IdMember.Name};", document);
+        }
     }
 }

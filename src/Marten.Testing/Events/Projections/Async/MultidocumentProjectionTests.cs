@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Marten.Events.Projections;
 using Marten.Events.Projections.Async;
 using Marten.Storage;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
@@ -55,9 +56,9 @@ namespace Marten.Testing.Events.Projections.Async
         /// A projection which uses multiple streams and manages several document types: main Read Model it's builiding and
         /// a side-readmodel used as a kind of helper
         /// </summary>
-        public class OrderProjection : DocumentsProjection
+        public class OrderProjection: DocumentsProjection
         {
-            internal class CompanySideReadModel
+            public class CompanySideReadModel
             {
                 public Guid Id { get; set; }
                 public string Name { get; set; }
@@ -139,7 +140,7 @@ namespace Marten.Testing.Events.Projections.Async
         }
     }
 
-    public class MultidocumentProjectionTests : IntegratedFixture
+    public class MultidocumentProjectionTests: IntegrationContext
     {
         private static readonly Guid Company1Id = new Guid("5713D147-8D8E-499A-8CDF-ECEFF867D810");
         private static readonly Guid Company2Id = new Guid("18F5DE28-6027-4638-9D4F-496A5F29FB22");
@@ -289,5 +290,10 @@ namespace Marten.Testing.Events.Projections.Async
             },
             new Events.OrderPlaced() {Id = Order3Id, CompanyId = Company2Id, TotalAmount = 11.11m}
         };
+
+        public MultidocumentProjectionTests(DefaultStoreFixture fixture) : base(fixture)
+        {
+            DocumentTracking = DocumentTracking.IdentityOnly;
+        }
     }
 }

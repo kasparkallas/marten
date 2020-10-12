@@ -4,10 +4,11 @@ using System.Collections.Generic;
 using System.Linq;
 
 using System.Reflection;
+using Marten.Util;
 
 namespace Marten.Events.Projections
 {
-    public class ProjectionCollection : IEnumerable<IProjection>
+    public class ProjectionCollection: IEnumerable<IProjection>
     {
         private readonly StoreOptions _options;
         private readonly IList<IProjection> _projections = new List<IProjection>();
@@ -27,11 +28,11 @@ namespace Marten.Events.Projections
             return GetEnumerator();
         }
 
-        public AggregationProjection<T> AggregateStreamsWith<T>() where T : class, new()
+        public AggregationProjection<T> AggregateStreamsWith<T>() where T : class
         {
             var aggregator = _options.Events.AggregateFor<T>();
 
-            IAggregationFinder<T> finder = _options.Events.StreamIdentity == StreamIdentity.AsGuid
+            var finder = _options.Events.StreamIdentity == StreamIdentity.AsGuid
                 ? (IAggregationFinder<T>)new AggregateFinder<T>()
                 : new StringIdentifiedAggregateFinder<T>();
 
@@ -52,7 +53,8 @@ namespace Marten.Events.Projections
 
         public void Add(IProjection projection)
         {
-            if (projection == null) throw new ArgumentNullException(nameof(projection));
+            if (projection == null)
+                throw new ArgumentNullException(nameof(projection));
 
             if (projection is IDocumentProjection)
             {
@@ -62,16 +64,17 @@ namespace Marten.Events.Projections
             _projections.Add(projection);
         }
 
-        public void Add<T>() where T : IProjection, new()
+        public void Add<T>() where T : IProjection
         {
-            Add(new T());
+            Add(New<T>.Instance());
         }
 
-        public void Add<T>(Func<T> projectionFactory) where T : IProjection, new()
+        public void Add<T>(Func<T> projectionFactory) where T : IProjection
         {
             var lazyLoadedProjection = new LazyLoadedProjection<T>(projectionFactory);
 
-            if (lazyLoadedProjection == null) throw new ArgumentNullException(nameof(lazyLoadedProjection));
+            if (lazyLoadedProjection == null)
+                throw new ArgumentNullException(nameof(lazyLoadedProjection));
 
             if (typeof(T).GetTypeInfo().IsAssignableFrom(typeof(IDocumentProjection).GetTypeInfo()))
             {

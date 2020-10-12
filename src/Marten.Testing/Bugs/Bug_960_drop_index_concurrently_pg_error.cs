@@ -1,5 +1,6 @@
-﻿using System;
+using System;
 using System.Linq;
+using Marten.Testing.Harness;
 using Xunit;
 
 namespace Marten.Testing.Bugs
@@ -11,7 +12,7 @@ namespace Marten.Testing.Bugs
         public string Field2 { get; set; }
     }
 
-    public class Bug_960_drop_index_concurrently_pg_error : IntegratedFixture
+    public class Bug_960_drop_index_concurrently_pg_error: BugIntegrationContext
     {
         /// <summary>
         /// Fix for PG error "0A000: DROP INDEX CONCURRENTLY must be first action in transaction"
@@ -20,10 +21,9 @@ namespace Marten.Testing.Bugs
         public async void can_work_after_adding_a_new_index_and_dropping_an_existing_one()
         {
             // Create store with index on Field 1
-            var store1 = DocumentStore.For(_ =>
+            var store1 = SeparateStore(_ =>
             {
                 _.AutoCreateSchemaObjects = AutoCreate.CreateOrUpdate;
-                _.Connection(ConnectionSource.ConnectionString);
                 _.Schema.For<Important>().Index(x => x.Field1);
             });
 
@@ -42,14 +42,12 @@ namespace Marten.Testing.Bugs
 
             // Add index on Field2 but exclude index on field 1.
             // Prior to fix, this throws error "0A000: DROP INDEX CONCURRENTLY must be first action in transaction"
-            var store2 = DocumentStore.For(_ =>
+            var store2 = SeparateStore(_ =>
             {
                 _.AutoCreateSchemaObjects = AutoCreate.CreateOrUpdate;
-                _.Connection(ConnectionSource.ConnectionString);
                 _.Schema.For<Important>().Index(x => x.Field2);
             });
 
-            
             using (var session = store2.LightweightSession())
             {
                 await session.Query<Important>()
@@ -57,5 +55,6 @@ namespace Marten.Testing.Bugs
                     .ToListAsync();
             }
         }
+
     }
 }

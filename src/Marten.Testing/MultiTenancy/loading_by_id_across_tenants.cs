@@ -1,18 +1,20 @@
 ﻿using System.Linq;
 using System.Threading.Tasks;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.MultiTenancy
 {
-    public class loading_by_id_across_tenants : IntegratedFixture
+    public class loading_by_id_across_tenants : IntegrationContext
     {
         private readonly Target targetRed1 = Target.Random();
         private readonly Target targetRed2 = Target.Random();
         private readonly Target targetBlue1 = Target.Random();
         private readonly Target targetBlue2 = Target.Random();
 
-        public loading_by_id_across_tenants()
+        public loading_by_id_across_tenants(DefaultStoreFixture fixture) : base(fixture)
         {
             StoreOptions(_ =>
             {
@@ -39,14 +41,14 @@ namespace Marten.Testing.MultiTenancy
         {
             using (var red = theStore.QuerySession("Red"))
             {
-                red.Load<Target>(targetRed1.Id).ShouldNotBeNull();
-                red.Load<Target>(targetBlue1.Id).ShouldBeNull();
+                SpecificationExtensions.ShouldNotBeNull(red.Load<Target>(targetRed1.Id));
+                SpecificationExtensions.ShouldBeNull(red.Load<Target>(targetBlue1.Id));
             }
 
             using (var blue = theStore.QuerySession("Blue"))
             {
-                blue.Load<Target>(targetBlue1.Id).ShouldNotBeNull();
-                blue.Load<Target>(targetRed1.Id).ShouldBeNull();
+                SpecificationExtensions.ShouldNotBeNull(blue.Load<Target>(targetBlue1.Id));
+                SpecificationExtensions.ShouldBeNull(blue.Load<Target>(targetRed1.Id));
             }
         }
 
@@ -89,14 +91,14 @@ namespace Marten.Testing.MultiTenancy
         {
             using (var red = theStore.QuerySession("Red"))
             {
-                (await red.LoadAsync<Target>(targetRed1.Id)).ShouldNotBeNull();
-                (await red.LoadAsync<Target>(targetBlue1.Id)).ShouldBeNull();
+                SpecificationExtensions.ShouldNotBeNull((await red.LoadAsync<Target>(targetRed1.Id)));
+                SpecificationExtensions.ShouldBeNull((await red.LoadAsync<Target>(targetBlue1.Id)));
             }
 
             using (var blue = theStore.QuerySession("Blue"))
             {
-                (await blue.LoadAsync<Target>(targetBlue1.Id)).ShouldNotBeNull();
-                (await blue.LoadAsync<Target>(targetRed1.Id)).ShouldBeNull();
+                SpecificationExtensions.ShouldNotBeNull((await blue.LoadAsync<Target>(targetBlue1.Id)));
+                SpecificationExtensions.ShouldBeNull((await blue.LoadAsync<Target>(targetRed1.Id)));
             }
         }
 

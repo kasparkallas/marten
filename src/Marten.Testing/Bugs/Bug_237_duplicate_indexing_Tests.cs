@@ -1,10 +1,11 @@
 using Marten.Services;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_237_duplicate_indexing_Tests : DocumentSessionFixture<NulloIdentityMap>
+    public class Bug_237_duplicate_indexing_Tests: BugIntegrationContext
     {
         [Fact]
         public void save()
@@ -19,5 +20,6 @@ namespace Marten.Testing.Bugs
             theSession.Store(new Issue());
             theSession.SaveChanges();
         }
+
     }
 }

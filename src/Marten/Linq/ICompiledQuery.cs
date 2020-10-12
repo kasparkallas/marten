@@ -5,13 +5,6 @@ using System.Linq.Expressions;
 
 namespace Marten.Linq
 {
-    public class InvalidCompiledQueryException : Exception
-    {
-        public InvalidCompiledQueryException(string message) : base(message)
-        {
-        }
-    }
-
     /// <summary>
     /// Used to express a query expression that when used will be cached by class type implementing this interface
     /// </summary>
@@ -20,10 +13,10 @@ namespace Marten.Linq
     // SAMPLE: ICompiledQuery
     public interface ICompiledQuery<TDoc, TOut>
     {
-        Expression<Func<IQueryable<TDoc>, TOut>> QueryIs();
+        Expression<Func<IMartenQueryable<TDoc>, TOut>> QueryIs();
     }
-    // ENDSAMPLE
 
+    // ENDSAMPLE
 
     /// <summary>
     /// A *temporary* marker interface that for now is necessary to express enumerable result sets
@@ -31,9 +24,10 @@ namespace Marten.Linq
     /// </summary>
     /// <typeparam name="TDoc">The document</typeparam>
     // SAMPLE: ICompiledListQuery-with-no-select
-    public interface ICompiledListQuery<TDoc> : ICompiledListQuery<TDoc, TDoc>
+    public interface ICompiledListQuery<TDoc>: ICompiledListQuery<TDoc, TDoc>
     {
     }
+
     // ENDSAMPLE
 
     /// <summary>
@@ -42,9 +36,10 @@ namespace Marten.Linq
     /// <typeparam name="TDoc">The document</typeparam>
     /// <typeparam name="TOut">The output type</typeparam>
     // SAMPLE: ICompiledListQuery-with-select
-    public interface ICompiledListQuery<TDoc, TOut> : ICompiledQuery<TDoc, IEnumerable<TOut>>
+    public interface ICompiledListQuery<TDoc, TOut>: ICompiledQuery<TDoc, IEnumerable<TOut>>
     {
     }
+
     // ENDSAMPLE
 
     /// <summary>
@@ -52,8 +47,9 @@ namespace Marten.Linq
     /// </summary>
     /// <typeparam name="TDoc">The document</typeparam>
     // SAMPLE: ICompiledQuery-for-single-doc
-    public interface ICompiledQuery<TDoc> : ICompiledQuery<TDoc, TDoc>
+    public interface ICompiledQuery<TDoc>: ICompiledQuery<TDoc, TDoc>
     {
     }
+
     // ENDSAMPLE
 }

@@ -4,18 +4,18 @@ using System.Linq;
 using System.Linq.Expressions;
 using Baseline;
 using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Attributes.Jobs;
 using Marten;
 using Marten.Linq;
 using Marten.Testing;
+using Marten.Testing.Documents;
 
 namespace MartenBenchmarks
 {
     [SimpleJob(warmupCount: 2)]
-
+    [MemoryDiagnoser]
     public class LinqActions
     {
-        [Setup]
+        [GlobalSetup]
         public void Setup()
         {
             var docs = Target.GenerateRandomData(500).ToArray();
@@ -27,7 +27,6 @@ namespace MartenBenchmarks
         }
 
         [Benchmark]
-        [MemoryDiagnoser]
         public void CreateLinqCommand()
         {
             using (var session = BenchmarkStore.Store.OpenSession())
@@ -39,7 +38,6 @@ namespace MartenBenchmarks
         }
 
         [Benchmark]
-        [MemoryDiagnoser]
         public void RunLinqQuery()
         {
             using (var query = BenchmarkStore.Store.OpenSession())
@@ -50,7 +48,6 @@ namespace MartenBenchmarks
         }
 
         [Benchmark]
-        [MemoryDiagnoser]
         public void CompiledQueries()
         {
             using (var query = BenchmarkStore.Store.OpenSession())
@@ -60,9 +57,9 @@ namespace MartenBenchmarks
         }
     }
 
-    public class BlueTargets : ICompiledListQuery<Target>
+    public class BlueTargets: ICompiledListQuery<Target>
     {
-        public Expression<Func<IQueryable<Target>, IEnumerable<Target>>> QueryIs()
+        public Expression<Func<IMartenQueryable<Target>, IEnumerable<Target>>> QueryIs()
         {
             return x => x.Where(_ => _.Color == Colors.Blue);
         }

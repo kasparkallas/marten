@@ -1,20 +1,20 @@
-﻿using System;
+using System;
 using System.Threading;
 using System.Threading.Tasks;
 using Baseline.Dates;
-using Marten.Events;
 using Marten.Events.Projections;
 using Marten.Events.Projections.Async;
 using Marten.Storage;
 using Marten.Testing;
 using Marten.Testing.AsyncDaemon;
 using Marten.Testing.CodeTracker;
+using Marten.Testing.Harness;
 using Marten.Util;
 using StoryTeller;
 
 namespace Marten.Storyteller.Fixtures
 {
-    public class AsyncDaemonFixture : Fixture
+    public class AsyncDaemonFixture: Fixture
     {
         private StoreOptions _options;
         private DaemonSettings _settings;
@@ -60,7 +60,6 @@ namespace Marten.Storyteller.Fixtures
         }
 
         protected AsyncDaemonTestHelper helper;
-
 
         public void EventSchemaIs(string schema)
         {
@@ -134,8 +133,7 @@ namespace Marten.Storyteller.Fixtures
         }
     }
 
-
-    public class OccasionalErroringProjection : IProjection
+    public class OccasionalErroringProjection: IProjection
     {
         private readonly Random _random = new Random(5);
         private bool _failed;
@@ -143,9 +141,9 @@ namespace Marten.Storyteller.Fixtures
         public Type[] Consumes { get; } = new Type[] { typeof(ProjectStarted), typeof(IssueCreated), typeof(IssueClosed), typeof(Commit) };
         public Type Produces { get; } = typeof(FakeThing);
         public AsyncOptions AsyncOptions { get; } = new AsyncOptions();
+
         public void Apply(IDocumentSession session, EventPage page)
         {
-
         }
 
         public Task ApplyAsync(IDocumentSession session, EventPage page, CancellationToken token)
@@ -163,7 +161,6 @@ namespace Marten.Storyteller.Fixtures
 
         public void EnsureStorageExists(ITenant tenant)
         {
-            
         }
     }
 

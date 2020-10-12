@@ -1,5 +1,2 @@
-﻿using System.Reflection;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-
-
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Marten.Testing")]
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Marten.Schema.Testing")]

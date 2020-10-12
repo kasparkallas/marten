@@ -1,14 +1,15 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Marten.Services;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_490_hierarchy_and_include : DocumentSessionFixture<IdentityMap>
+    public class Bug_490_hierarchy_and_include: BugIntegrationContext
     {
         public Bug_490_hierarchy_and_include()
         {
@@ -39,12 +40,11 @@ namespace Marten.Testing.Bugs
             public abstract string Type { get; }
         }
 
-        public class StatusActivity : Activity
+        public class StatusActivity: Activity
         {
             public override string Type => "StatusUpdate";
             public string StatusText { get; set; }
         }
-
 
         [Fact]
         public void load_abstract_type_with_include()

@@ -1,13 +1,14 @@
 using System;
 using System.Data;
 using System.Threading;
+using Marten.Exceptions;
 using Marten.Storage;
 using Marten.Util;
 using NpgsqlTypes;
 
 namespace Marten.Schema.Identity.Sequences
 {
-    public class HiloSequence : ISequence
+    public class HiloSequence: ISequence
     {
         private readonly ITenant _tenant;
         private readonly StoreOptions _options;
@@ -21,7 +22,6 @@ namespace Marten.Schema.Identity.Sequences
             _tenant = tenant;
             _options = options;
             _entityName = entityName;
-
             CurrentHi = -1;
             CurrentLo = 1;
             MaxLo = settings.MaxLo;
@@ -33,9 +33,10 @@ namespace Marten.Schema.Identity.Sequences
         public int CurrentLo { get; private set; }
 
         public int MaxLo { get; }
+
         public void SetFloor(long floor)
         {
-            var numberOfPages = (long) Math.Ceiling((double)floor / MaxLo);
+            var numberOfPages = (long)Math.Ceiling((double)floor / MaxLo);
             var updateSql =
                 $"update {_options.DatabaseSchemaName}.mt_hilo set hi_value = :floor where entity_name = :name";
 
@@ -54,32 +55,21 @@ namespace Marten.Schema.Identity.Sequences
 
             // And again to get it where we need it to be
             AdvanceToNextHi();
-
         }
 
         public int NextInt()
         {
-            return (int) NextLong();
+            return (int)NextLong();
         }
 
         public long NextLong()
         {
             lock (_lock)
             {
-                if (ShouldAdvanceHi())
+                if(ShouldAdvanceHi())
                 {
-                    try
-                    {
-                        AdvanceToNextHi();
-                    }
-                    catch (Exception)
-                    {
-                        // Retry once.
-                        Thread.Sleep(50);
-                        AdvanceToNextHi();
-                    }
+                    AdvanceToNextHi();
                 }
-
                 return AdvanceValue();
             }
         }
@@ -92,14 +82,26 @@ namespace Marten.Schema.Identity.Sequences
 
                 try
                 {
-                    var tx = conn.BeginTransaction(IsolationLevel.Serializable);
-                    var raw = conn.CreateCommand().CallsSproc(GetNextFunction)
-                        .With("entity", _entityName)
-                        .Returns("next", NpgsqlDbType.Bigint).ExecuteScalar();
+                    var attempts = 0;
+                    do
+                    {
+                        attempts++;
 
-                    tx.Commit();
+                        // Sproc is expected to return -1 if it's unable to
+                        // atomically secure the next hi
+                        var raw = conn.CreateCommand().CallsSproc(GetNextFunction)
+                            .With("entity", _entityName)
+                            .Returns("next", NpgsqlDbType.Bigint).ExecuteScalar();
 
-                    CurrentHi = Convert.ToInt64(raw);
+                        CurrentHi = Convert.ToInt64(raw);
+
+                    } while (CurrentHi < 0 && attempts < _options.HiloSequenceDefaults.MaxAdvanceToNextHiAttempts);
+
+                    // if CurrentHi is still less than 0 at this point, then throw exception
+                    if (CurrentHi < 0)
+                    {
+                        throw new HiloSequenceAdvanceToNextHiAttemptsExceededException();
+                    }
                 }
                 finally
                 {
@@ -113,12 +115,11 @@ namespace Marten.Schema.Identity.Sequences
 
         public long AdvanceValue()
         {
-            var result = (CurrentHi*MaxLo) + CurrentLo;
+            var result = (CurrentHi * MaxLo) + CurrentLo;
             CurrentLo++;
 
             return result;
         }
-
 
         public bool ShouldAdvanceHi()
         {

@@ -1,14 +1,19 @@
-﻿using System;
+using System;
 using System.Linq;
 using Marten.Services;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Marten.Testing.Linq
 {
     [ControlledQueryStoryteller]
-    public class query_with_nullable_types_Tests : DocumentSessionFixture<NulloIdentityMap>
+    public class query_with_nullable_types_Tests : IntegrationContext
     {
+        private readonly ITestOutputHelper _output;
+
         [Fact]
         public void query_against_non_null()
         {
@@ -83,6 +88,18 @@ namespace Marten.Testing.Linq
         }
 
         [Fact]
+        public void query_against_null_6()
+        {
+            theSession.Store(new Target { NullableBoolean = null });
+            theSession.Store(new Target { NullableBoolean = true });
+
+            theSession.SaveChanges();
+
+            theSession.Query<Target>().Count(x => x.NullableBoolean.HasValue == false)
+                .ShouldBe(1);
+        }
+
+        [Fact]
         public void query_against_not_null()
         {
             theSession.Store(new Target { NullableNumber = 3 });
@@ -93,8 +110,13 @@ namespace Marten.Testing.Linq
 
             theSession.SaveChanges();
 
-            theSession.Query<Target>().Where(x => x.NullableNumber.HasValue).Count()
+            theSession.Query<Target>().Count(x => x.NullableNumber.HasValue)
                 .ShouldBe(2);
+        }
+
+        public query_with_nullable_types_Tests(DefaultStoreFixture fixture, ITestOutputHelper output) : base(fixture)
+        {
+            _output = output;
         }
     }
 }

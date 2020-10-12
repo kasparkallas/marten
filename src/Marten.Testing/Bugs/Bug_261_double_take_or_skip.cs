@@ -1,12 +1,14 @@
-﻿using System.Linq;
+using System.Linq;
 using Marten.Services;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
     [ControlledQueryStoryteller]
-    public class Bug_261_double_take_or_skip : DocumentSessionFixture<NulloIdentityMap>
+    public class Bug_261_double_take_or_skip: IntegrationContext
     {
         [Fact]
         public void does_not_blow_up_with_double_take()
@@ -36,6 +38,10 @@ namespace Marten.Testing.Bugs
 
             var result = theSession.Query<Target>().Take(10).Take(4).ToList();
             result.Count.ShouldBe(4);
+        }
+
+        public Bug_261_double_take_or_skip(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

@@ -1,12 +1,14 @@
 using System.Linq;
 using Marten.Services;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
+using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Linq
 {
-    public class invoking_queryable_any_Tests : DocumentSessionFixture<NulloIdentityMap>
+    public class invoking_queryable_any_Tests: IntegrationContext
     {
-
         [Fact]
         public void any_miss_with_query()
         {
@@ -18,18 +20,15 @@ namespace Marten.Testing.Linq
 
             theSession.Query<Target>().Any(x => x.Number == 11)
                 .ShouldBeFalse();
-                
         }
 
-        
         [Fact]
         public void naked_any_miss()
         {
             theSession.Query<Target>().Any()
                 .ShouldBeFalse();
-
         }
-        
+
         [Fact]
         public void naked_any_hit()
         {
@@ -41,8 +40,7 @@ namespace Marten.Testing.Linq
 
             theSession.Query<Target>().Any().ShouldBeTrue();
         }
-        
-        
+
         [Fact]
         public void any_hit_with_only_one_document()
         {
@@ -55,7 +53,6 @@ namespace Marten.Testing.Linq
             theSession.Query<Target>().Any(x => x.Number == 3)
                 .ShouldBeTrue();
         }
-        
 
         [Fact]
         public void any_hit_with_more_than_one_match()
@@ -69,7 +66,9 @@ namespace Marten.Testing.Linq
             theSession.Query<Target>().Where(x => x.Number == 2).Any()
                 .ShouldBeTrue();
         }
-         
-         
+
+        public invoking_queryable_any_Tests(DefaultStoreFixture fixture) : base(fixture)
+        {
+        }
     }
 }

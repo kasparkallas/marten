@@ -1,15 +1,14 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using System.Threading.Tasks;
 using Baseline;
 using Marten.Linq;
-using Marten.Services.Includes;
 
 namespace Marten.Services.BatchQuerying
 {
-    public class BatchedQueryable<T> : IBatchedQueryable<T> where T : class
+    public class BatchedQueryable<T>: IBatchedQueryable<T> where T : class
     {
         private readonly BatchedQuery _parent;
         private IMartenQueryable<T> _inner;
@@ -50,7 +49,6 @@ namespace Marten.Services.BatchQuerying
             return this;
         }
 
-
         public IBatchedQueryable<T> OrderByDescending<TKey>(Expression<Func<T, TKey>> expression)
         {
             _inner = _inner.OrderByDescending(expression).As<IMartenQueryable<T>>();
@@ -62,24 +60,22 @@ namespace Marten.Services.BatchQuerying
             return new TransformedBatchQueryable<TValue>(_parent, _inner.Select(selection).As<IMartenQueryable<TValue>>());
         }
 
-       
-
-        public IBatchedQueryable<T> Include<TInclude>(Expression<Func<T, object>> idSource, Action<TInclude> callback, JoinType joinType = JoinType.Inner) where TInclude : class
+        public IBatchedQueryable<T> Include<TInclude>(Expression<Func<T, object>> idSource, Action<TInclude> callback) where TInclude : class
         {
-            _inner = _inner.Include(idSource, callback, joinType);
+            _inner = _inner.Include(idSource, callback);
             return this;
         }
 
-        public IBatchedQueryable<T> Include<TInclude>(Expression<Func<T, object>> idSource, IList<TInclude> list, JoinType joinType = JoinType.Inner) where TInclude : class
+        public IBatchedQueryable<T> Include<TInclude>(Expression<Func<T, object>> idSource, IList<TInclude> list) where TInclude : class
         {
-            _inner = _inner.Include(idSource, list, joinType);
+            _inner = _inner.Include(idSource, list);
             return this;
         }
 
-        public IBatchedQueryable<T> Include<TInclude, TKey>(Expression<Func<T, object>> idSource, IDictionary<TKey, TInclude> dictionary,
-            JoinType joinType = JoinType.Inner) where TInclude : class
+        public IBatchedQueryable<T> Include<TInclude, TKey>(Expression<Func<T, object>> idSource,
+            IDictionary<TKey, TInclude> dictionary) where TInclude : class
         {
-            _inner = _inner.Include(idSource, dictionary, joinType);
+            _inner = _inner.Include(idSource, dictionary);
             return this;
         }
 

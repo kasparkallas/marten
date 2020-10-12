@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 
 namespace Marten
@@ -19,7 +19,6 @@ namespace Marten
         /// <param name="document"></param>
         /// <returns></returns>
         string ToJson(object document);
-
 
         /// <summary>
         /// Deserialize a JSON string into an object of type T
@@ -51,8 +50,31 @@ namespace Marten
         /// </summary>
         EnumStorage EnumStorage { get; }
 
+        /// <summary>
+        /// Specify whether properties in the JSON document should use Camel or Pascal casing.
+        /// </summary>
         Casing Casing { get; }
+
+        /// <summary>
+        /// Specify whether collections should be stored as json arrays (without type names)
+        /// </summary>
+        CollectionStorage CollectionStorage { get; }
+
+        /// <summary>
+        /// Specify whether non public members should be used during deserialization
+        /// </summary>
+        NonPublicMembersStorage NonPublicMembersStorage { get; }
+
+        /// <summary>
+        /// Write the JSON for a document with embedded
+        /// type information. This is used inside the patching API
+        /// to handle polymorphic collections
+        /// </summary>
+        /// <param name="document"></param>
+        /// <returns></returns>
+        string ToJsonWithTypes(object document);
     }
+
     // ENDSAMPLE
 
     public enum EnumStorage
@@ -66,5 +88,19 @@ namespace Marten
         Default,
         CamelCase,
         SnakeCase
+    }
+
+    public enum CollectionStorage
+    {
+        Default,
+        AsArray
+    }
+
+    [Flags]
+    public enum NonPublicMembersStorage
+    {
+        Default = 0,
+        NonPublicSetters = 1,
+        NonPublicDefaultConstructor = 2
     }
 }

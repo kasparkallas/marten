@@ -1,12 +1,17 @@
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq.Expressions;
 using System.Reflection;
 using Baseline;
+using Marten.Linq.Fields;
+using Marten.Linq.Filters;
+using Marten.Linq.SqlGeneration;
 using Marten.Schema;
 
 namespace Marten.Linq.Parsing
 {
-    public class SimpleBinaryComparisonExpressionParser : IExpressionParser<BinaryExpression>
+    public class SimpleBinaryComparisonExpressionParser: IExpressionParser<BinaryExpression>
     {
         private readonly string _isOperator;
         private readonly string _wherePrefix;
@@ -32,52 +37,48 @@ namespace Marten.Linq.Parsing
             return expression.Type == typeof(bool) && _operators.ContainsKey(expression.NodeType);
         }
 
-        public IWhereFragment Parse(IQueryableDocument mapping, ISerializer serializer, BinaryExpression expression)
+        public ISqlFragment Parse(IFieldMapping mapping, ISerializer serializer, BinaryExpression expression)
         {
-            var isValueExpressionOnRight = expression.Right.IsValueExpression();
+            var areBothMemberExpressions = !expression.Left.IsValueExpression() && !expression.Right.IsValueExpression();
+            var isValueExpressionOnRight = areBothMemberExpressions || expression.Right.IsValueExpression();
             var jsonLocatorExpression = isValueExpressionOnRight ? expression.Left : expression.Right;
             var valueExpression = isValueExpressionOnRight ? expression.Right : expression.Left;
 
-            var members = FindMembers.Determine(jsonLocatorExpression);
+            var field = mapping.FieldFor(jsonLocatorExpression);
 
-            var field = mapping.FieldFor(members);
+            object value;
 
-	        object value;
+            if (valueExpression is MemberExpression memberAccess)
+            {
+                var fieldOther = mapping.FieldFor(memberAccess);
+                value = fieldOther.TypedLocator;
+            }
+            else
+            {
+                memberAccess = null;
+                value = field.GetValueForCompiledQueryParameter(valueExpression);
+            }
 
-	        if (valueExpression is MemberExpression memberAccess)
-	        {
-		        var membersOther = FindMembers.Determine(memberAccess);
-		        var fieldOther = mapping.FieldFor(membersOther);
-		        value = fieldOther.SqlLocator;
-	        }
-	        else
-	        {
-		        memberAccess = null;
-				value = field.GetValue(valueExpression);
-	        }
 
-	        var jsonLocator = field.SqlLocator;
 
             var useContainment = mapping.PropertySearching == PropertySearching.ContainmentOperator || field.ShouldUseContainmentOperator();
 
-            var isDuplicated = (mapping.FieldFor(members) is DuplicatedField);
-            var isEnumString = field.MemberType.GetTypeInfo().IsEnum && serializer.EnumStorage == EnumStorage.AsString;
-
             if (useContainment &&
-                expression.NodeType == ExpressionType.Equal && value != null && !isDuplicated && !isEnumString)
+                expression.NodeType == ExpressionType.Equal && value != null && !(field is DuplicatedField))
             {
                 return new ContainmentWhereFragment(serializer, expression, _wherePrefix);
             }
 
-
             if (value == null)
             {
                 var sql = expression.NodeType == ExpressionType.NotEqual
-                    ? $"({jsonLocator}) is not null"
-                    : $"({jsonLocator}) {_isOperator} null";
+                    ? $"({field.RawLocator}) is not null"
+                    : $"({field.RawLocator}) {_isOperator} null";
 
                 return new WhereFragment(sql);
             }
+
+            var jsonLocator = field.TypedLocator;
 
             var op = _operators[expression.NodeType];
 
@@ -89,22 +90,28 @@ namespace Marten.Linq.Parsing
             }
 
             // ! == -> <>
-            
+
             if (expression.Left.NodeType == ExpressionType.Not && expression.NodeType == ExpressionType.Equal)
             {
                 op = _operators[ExpressionType.NotEqual];
             }
 
-	        if (memberAccess != null)
-	        {
-		        return new WhereFragment($"{_wherePrefix}{jsonLocator} {op} {value}");
-			}
+            // field.HasValue == true or field.HasValue == false
+            if (expression.Left.NodeType == ExpressionType.NotEqual && value is bool)
+            {
+                jsonLocator = $"({jsonLocator}) is not null";
+            }
+
+            if (memberAccess != null)
+            {
+                return new WhereFragment($"{_wherePrefix}{jsonLocator} {op} {value}");
+            }
             var whereFormat = isValueExpressionOnRight ? "{0} {1} ?" : "? {1} {0}";
             return new WhereFragment($"{_wherePrefix}{whereFormat.ToFormat(jsonLocator, op)}", value);
 
-           
             //return value == null ? new WhereFragment($"({jsonLocator}) {_isOperator} null") : new WhereFragment($"{_wherePrefix}({jsonLocator}) {op} ?", value);
         }
+
         private static object moduloByValue(BinaryExpression binary)
         {
             var moduloValueExpression = binary?.Right as ConstantExpression;

@@ -1,15 +1,17 @@
-﻿using System;
+using System;
 using System.Linq;
+using Marten.Exceptions;
 using Marten.Services;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 using Xunit.Abstractions;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_964_optimistic_concurrency_with_subclass : IntegratedFixture
+    public class Bug_964_optimistic_concurrency_with_subclass: BugIntegrationContext
     {
-        public Bug_964_optimistic_concurrency_with_subclass(ITestOutputHelper output = null) : base(output)
+        public Bug_964_optimistic_concurrency_with_subclass()
         {
             StoreOptions(_ =>
             {
@@ -21,14 +23,9 @@ namespace Marten.Testing.Bugs
             });
         }
 
-
-
-
-
         [Fact]
         public void should_not_throw_a_ConcurrencyException()
         {
-
             CloudStorageMinio minio1 = new CloudStorageMinio()
             {
                 Description = "Test 1",
@@ -53,11 +50,9 @@ namespace Marten.Testing.Bugs
             }
         }
 
-
         [Fact]
         public void should_Throw_ConcurrencyException()
         {
-
             CloudStorageMinio minio1 = new CloudStorageMinio()
             {
                 Description = "Test 1",
@@ -94,18 +89,14 @@ namespace Marten.Testing.Bugs
 
                 session.Store(minio2, minio2.Version);
 
-                Exception<AggregateException>.ShouldBeThrownBy(() =>
+                // It throws ConcurrencyException because there is only one
+                // exception
+                Exception<ConcurrencyException>.ShouldBeThrownBy(() =>
                 {
                     session.SaveChanges();
-                }).InnerExceptions.Single().ShouldBeOfType<ConcurrencyException>();
-
+                });
             }
         }
-
-
-
-
-
     }
 
     public abstract class CloudStorage
@@ -121,7 +112,7 @@ namespace Marten.Testing.Bugs
         }
     }
 
-    public class CloudStorageMinio : CloudStorage
+    public class CloudStorageMinio: CloudStorage
     {
         public string Endpoint { get; set; }
         public string AccessKey { get; set; }

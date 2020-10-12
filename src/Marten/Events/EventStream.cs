@@ -1,7 +1,8 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Baseline;
+using Marten.Exceptions;
 using Marten.Schema.Identity;
 using Marten.Services;
 
@@ -11,7 +12,8 @@ namespace Marten.Events
     {
         public static IEvent ToEvent(object @event)
         {
-            if (@event == null) throw new ArgumentNullException(nameof(@event));
+            if (@event == null)
+                throw new ArgumentNullException(nameof(@event));
 
             return typeof(Event<>).CloseAndBuildAs<IEvent>(@event, @event.GetType());
         }
@@ -41,7 +43,7 @@ namespace Marten.Events
 
         public EventStream(string stream, IEvent[] events, bool isNew)
         {
-            Id = Guid.NewGuid();
+            Id = CombGuidIdGeneration.NewGuid();
             Key = stream;
             AddEvents(events);
             IsNew = isNew;

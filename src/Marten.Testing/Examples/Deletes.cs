@@ -1,4 +1,4 @@
-﻿using User = Marten.Testing.Documents.User;
+using Marten.Testing.Documents;
 
 namespace Marten.Testing.Examples
 {
@@ -16,7 +16,8 @@ namespace Marten.Testing.Examples
 
             session.Delete(user.Id);
             session.SaveChanges();
-        } 
+        }
+
         // ENDSAMPLE
     }
 }

@@ -1,39 +1,81 @@
-﻿using System;
 using System.Collections.Generic;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
-using Marten.Linq.Model;
-using Marten.Services;
+using Marten.Internal;
+using Marten.Internal.CodeGeneration;
+using Marten.Linq.Selectors;
+using Marten.Linq.SqlGeneration;
 using Marten.Util;
 
 namespace Marten.Linq.QueryHandlers
 {
-    public class ListQueryHandler<T> : IQueryHandler<IReadOnlyList<T>>
+    public class ListQueryHandler<T> : IQueryHandler<IReadOnlyList<T>>, IQueryHandler<IEnumerable<T>>, IMaybeStatefulHandler
     {
-        private readonly LinqQuery<T> _query;
+        private readonly Statement _statement;
+        private readonly ISelector<T> _selector;
 
-        public ListQueryHandler(LinqQuery<T> query)
+        public ListQueryHandler(Statement statement, ISelector<T> selector)
         {
-            _query = query;
+            _statement = statement;
+            _selector = selector;
         }
 
-        public IReadOnlyList<T> Handle(DbDataReader reader, IIdentityMap map, QueryStatistics stats)
+        public void ConfigureCommand(CommandBuilder builder, IMartenSession session)
         {
-            return _query.Selector.Read(reader, map, stats);
+            _statement.Configure(builder);
         }
 
-        public Task<IReadOnlyList<T>> HandleAsync(DbDataReader reader, IIdentityMap map, QueryStatistics stats, CancellationToken token)
+        public IReadOnlyList<T> Handle(DbDataReader reader, IMartenSession session)
         {
-            return _query.Selector.ReadAsync(reader, map, stats, token);
+            var list = new List<T>();
+
+            while (reader.Read())
+            {
+                var item = _selector.Resolve(reader);
+                list.Add(item);
+            }
+
+            return list;
         }
 
-
-        public void ConfigureCommand(CommandBuilder builder)
+        async Task<IEnumerable<T>> IQueryHandler<IEnumerable<T>>.HandleAsync(DbDataReader reader, IMartenSession session, CancellationToken token)
         {
-            _query.ConfigureCommand(builder);
+            var list = await HandleAsync(reader, session, token).ConfigureAwait(false);
+            return list;
         }
 
-        public Type SourceType => _query.SourceType;
+        IEnumerable<T> IQueryHandler<IEnumerable<T>>.Handle(DbDataReader reader, IMartenSession session)
+        {
+            return Handle(reader, session);
+        }
+
+        public async Task<IReadOnlyList<T>> HandleAsync(DbDataReader reader, IMartenSession session, CancellationToken token)
+        {
+            var list = new List<T>();
+
+            while (await reader.ReadAsync(token).ConfigureAwait(false))
+            {
+                var item = await _selector.ResolveAsync(reader, token).ConfigureAwait(false);
+                list.Add(item);
+            }
+
+            return list;
+        }
+
+        public bool DependsOnDocumentSelector()
+        {
+            // There will be from dynamic codegen
+            // ReSharper disable once SuspiciousTypeConversion.Global
+            return _selector is IDocumentSelector;
+        }
+
+        public IQueryHandler CloneForSession(IMartenSession session, QueryStatistics statistics)
+        {
+            var selector = (ISelector<T>)session.StorageFor<T>().BuildSelector(session);
+
+            return new ListQueryHandler<T>(null, selector);
+        }
     }
+
 }

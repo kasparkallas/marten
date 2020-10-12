@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netcoreapp2.1</TargetFramework>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
     <AssemblyName>MartenBenchmarks</AssemblyName>
     <OutputType>Exe</OutputType>
     <PackageId>MartenBenchmarks</PackageId>
@@ -11,9 +11,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Marten.Testing\Marten.Testing.csproj" />
+    <ProjectReference Include="..\Marten\Marten.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.10.14" />
+    <PackageReference Include="BenchmarkDotNet" Version="0.11.5" />
   </ItemGroup>
-
+  <ItemGroup>
+    <Folder Include="Benchmarks" />
+  </ItemGroup>
 </Project>

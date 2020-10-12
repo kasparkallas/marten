@@ -1,5 +1,6 @@
-﻿using Marten.Schema;
+using Marten.Schema;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
@@ -13,6 +14,8 @@ namespace Marten.Testing.Bugs
             // SAMPLE: configuring-initial-data
             var store = DocumentStore.For(_ =>
             {
+                _.DatabaseSchemaName = "Bug962";
+
                 _.Connection(ConnectionSource.ConnectionString);
 
                 // Add as many implementations of IInitialData as you need
@@ -42,7 +45,7 @@ namespace Marten.Testing.Bugs
     }
 
     // SAMPLE: initial-data
-    public class InitialData : IInitialData
+    public class InitialData: IInitialData
     {
         private readonly object[] _initialData;
 
@@ -61,7 +64,7 @@ namespace Marten.Testing.Bugs
             }
         }
     }
-    
+
     public static class InitialDatasets
     {
         public static readonly Company[] Companies =
@@ -76,5 +79,6 @@ namespace Marten.Testing.Bugs
             new User { FirstName = "Speedy" , LastName = "Gonzales" }
         };
     }
+
     // ENDSAMPLE
 }

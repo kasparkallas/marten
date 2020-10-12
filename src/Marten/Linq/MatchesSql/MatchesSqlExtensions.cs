@@ -1,4 +1,4 @@
-﻿using System;
+using Marten.Linq.SqlGeneration;
 
 namespace Marten.Linq.MatchesSql
 {
@@ -10,7 +10,7 @@ namespace Marten.Linq.MatchesSql
         /// <param name="doc"></param>
         /// <param name="whereFragment"></param>
         /// <returns></returns>
-        public static bool MatchesSql(this object doc, IWhereFragment whereFragment)
+        public static bool MatchesSql(this object doc, ISqlFragment whereFragment)
         {
             return true;
         }

@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using Marten.Linq;
 using Marten.Services;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Marten.Testing.Linq;
 using Shouldly;
 using Xunit;
@@ -15,7 +16,7 @@ namespace Marten.Testing.Services.BatchedQuerying
 {
 
 
-    public class batched_querying_with_aggregate_functions : DocumentSessionFixture<NulloIdentityMap>
+    public class batched_querying_with_aggregate_functions : IntegrationContext
     {
         [Fact]
         public async Task can_run_aggregate_functions()
@@ -37,11 +38,16 @@ namespace Marten.Testing.Services.BatchedQuerying
             (await sum).ShouldBe(1 + 3 + 5 + 6);
             (await average).ShouldBe(3.75);
         }
+
+        public batched_querying_with_aggregate_functions(DefaultStoreFixture fixture) : base(fixture)
+        {
+            DocumentTracking = DocumentTracking.IdentityOnly;
+        }
     }
 
 
     // TODO -- I vote to move this to ST specs for perf reasons
-    public class batched_querying_acceptance_Tests : DocumentSessionFixture<IdentityMap>
+    public class batched_querying_acceptance_Tests : IntegrationContext
     {
         private readonly Target target1 = Target.Random();
         private readonly Target target2 = Target.Random();
@@ -81,8 +87,9 @@ namespace Marten.Testing.Services.BatchedQuerying
             Role = "Master"
         };
 
-        public batched_querying_acceptance_Tests()
+        public batched_querying_acceptance_Tests(DefaultStoreFixture fixture) : base(fixture)
         {
+            DocumentTracking = DocumentTracking.IdentityOnly;
             StoreOptions(_ =>
             {
                 _.Schema.For<User>().AddSubClass(typeof (AdminUser)).AddSubClass(typeof (SuperUser))
@@ -96,7 +103,7 @@ namespace Marten.Testing.Services.BatchedQuerying
             theSession.SaveChanges();
         }
 
-        
+
 
         public void sample_config()
         {
@@ -129,7 +136,7 @@ public class FindByFirstName : ICompiledQuery<User, User>
 {
     public string FirstName { get; set; }
 
-    public Expression<Func<IQueryable<User>, User>> QueryIs()
+    public Expression<Func<IMartenQueryable<User>, User>> QueryIs()
     {
         return q => q.FirstOrDefault(x => x.FirstName == FirstName);
     }
@@ -219,7 +226,7 @@ tamba.Result.Id.ShouldBe(user2.Id);
 
             (await firstUser).UserName.ShouldBe("A2");
             (await firstAdmin).UserName.ShouldBe("A3");
-            (await noneUser).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await noneUser));
         }
 
         [Fact]
@@ -236,7 +243,7 @@ tamba.Result.Id.ShouldBe(user2.Id);
 
             (await tamba).FirstName.ShouldBe("Tamba");
             (await justin).FirstName.ShouldBe("Justin");
-            (await noneUser).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await noneUser));
         }
 
 
@@ -344,13 +351,15 @@ tamba.Result.Id.ShouldBe(user2.Id);
 
             await batch.Execute().ConfigureAwait(false);
 
-            (await task1).ShouldBeOfType<Target>().ShouldNotBeNull();
-            (await task3).ShouldBeOfType<Target>().ShouldNotBeNull();
+            SpecificationExtensions.ShouldNotBeNull((await task1).ShouldBeOfType<Target>());
+            SpecificationExtensions.ShouldNotBeNull((await task3).ShouldBeOfType<Target>());
         }
 
         [Fact]
         public async Task can_find_docs_by_id_that_should_be_in_identity_map()
         {
+            DocumentTracking = DocumentTracking.IdentityOnly;
+
             var batch1 = theSession.CreateBatchQuery();
             var task1 = batch1.Load<Target>(target1.Id);
             var task3 = batch1.Load<Target>(target3.Id);
@@ -385,6 +394,8 @@ tamba.Result.Id.ShouldBe(user2.Id);
         [Fact]
         public async Task can_find_multiple_docs_by_id_with_identity_map()
         {
+            DocumentTracking = DocumentTracking.IdentityOnly;
+
             var batch1 = theSession.CreateBatchQuery();
             var task1 = batch1.LoadMany<Target>().ById(target1.Id, target3.Id);
 
@@ -416,6 +427,8 @@ tamba.Result.Id.ShouldBe(user2.Id);
         [Fact]
         public async Task can_find_multiple_docs_by_id_with_identity_map_2()
         {
+
+
             var batch1 = theSession.CreateBatchQuery();
             var task1 = batch1.LoadMany<Target>().ByIdList(new List<Guid> {target1.Id, target3.Id});
 
@@ -451,9 +464,9 @@ tamba.Result.Id.ShouldBe(user2.Id);
 
             (await toList).ShouldHaveTheSameElementsAs("Derrick", "Dontari", "Eric", "Justin", "Sean", "Tamba");
             (await first).ShouldBe("Derrick");
-            (await firstOrDefault).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await firstOrDefault));
             (await single).ShouldBe("Tamba");
-            (await singleOrDefault).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await singleOrDefault));
         }
 
         [Fact]
@@ -482,9 +495,9 @@ tamba.Result.Id.ShouldBe(user2.Id);
             (await toList).Select(x => x.Name)
                 .ShouldHaveTheSameElementsAs("Derrick", "Dontari", "Eric", "Justin", "Sean", "Tamba");
             (await first).Name.ShouldBe("Derrick");
-            (await firstOrDefault).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await firstOrDefault));
             (await single).Name.ShouldBe("Tamba");
-            (await singleOrDefault).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await singleOrDefault));
         }
 
 
@@ -519,9 +532,9 @@ tamba.Result.Id.ShouldBe(user2.Id);
             (await toList).Select(x => x.Name)
                 .ShouldHaveTheSameElementsAs("Derrick", "Dontari", "Eric", "Justin", "Sean", "Tamba");
             (await first).Name.ShouldBe("Derrick");
-            (await firstOrDefault).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await firstOrDefault));
             (await single).Name.ShouldBe("Tamba");
-            (await singleOrDefault).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await singleOrDefault));
         }
 
 

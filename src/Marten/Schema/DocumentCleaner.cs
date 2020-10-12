@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using Baseline;
 using Marten.Services;
@@ -7,10 +7,10 @@ using Marten.Util;
 
 namespace Marten.Schema
 {
-    public class DocumentCleaner : IDocumentCleaner
+    public class DocumentCleaner: IDocumentCleaner
     {
         public static string DropAllFunctionSql = @"
-SELECT format('DROP FUNCTION %s.%s(%s);'
+SELECT format('DROP FUNCTION IF EXISTS %s.%s(%s);'
              ,n.nspname
              ,p.proname
              ,pg_get_function_identity_arguments(p.oid))
@@ -19,7 +19,7 @@ LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE  p.proname like 'mt_%' and n.nspname = ANY(?)";
 
         public static readonly string DropFunctionSql = @"
-SELECT format('DROP FUNCTION %s.%s(%s);'
+SELECT format('DROP FUNCTION IF EXISTS %s.%s(%s);'
              ,n.nspname
              ,p.proname
              ,pg_get_function_identity_arguments(p.oid))
@@ -27,6 +27,12 @@ FROM   pg_proc p
 LEFT JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
 WHERE  p.proname = '{0}'
 AND    n.nspname = '{1}';";
+
+        public static readonly string DropAllSequencesSql = @"SELECT format('DROP SEQUENCE %s.%s;'
+             ,s.sequence_schema
+             ,s.sequence_name)
+FROM   information_schema.sequences s
+WHERE  s.sequence_name like 'mt_%' and s.sequence_schema = ANY(?);";
 
         private readonly StoreOptions _options;
         private readonly ITenant _tenant;
@@ -70,12 +76,11 @@ AND    n.nspname = '{1}';";
         public void CompletelyRemove(Type documentType)
         {
             var mapping = _options.Storage.MappingFor(documentType);
-
             using (var conn = _tenant.CreateConnection())
             {
                 conn.Open();
 
-                mapping.RemoveAllObjects(_options.DdlRules, conn);
+                mapping.Schema.RemoveAllObjects(_options.DdlRules, conn);
             }
         }
 
@@ -89,7 +94,10 @@ AND    n.nspname = '{1}';";
                 schemaTables
                     .Each(tableName => { connection.Execute($"DROP TABLE IF EXISTS {tableName} CASCADE;"); });
 
-                var drops = connection.GetStringList(DropAllFunctionSql, new object[] { _options.Storage.AllSchemaNames() });
+                var allSchemas = new object[] { _options.Storage.AllSchemaNames() };
+
+                var drops = connection.GetStringList(DropAllFunctionSql, allSchemas)
+                    .Concat(connection.GetStringList(DropAllSequencesSql, allSchemas));
                 drops.Each(drop => connection.Execute(drop));
                 connection.Commit();
 
@@ -101,8 +109,14 @@ AND    n.nspname = '{1}';";
         {
             using (var connection = _tenant.OpenConnection(CommandRunnerMode.Transactional))
             {
-                connection.Execute($"truncate table {_options.Events.DatabaseSchemaName}.mt_events cascade;" +
-                                   $"truncate table {_options.Events.DatabaseSchemaName}.mt_streams cascade");
+                connection.Execute("DO $$ BEGIN " +
+                                        "IF EXISTS(SELECT * FROM information_schema.tables " +
+                                        $"WHERE table_name = 'mt_events' AND table_schema = '{_options.Events.DatabaseSchemaName}') " +
+                                        $"THEN TRUNCATE TABLE {_options.Events.DatabaseSchemaName}.mt_events CASCADE; END IF;" +
+                                        "IF EXISTS(SELECT * FROM information_schema.tables " +
+                                        $"WHERE table_name = 'mt_streams' AND table_schema = '{_options.Events.DatabaseSchemaName}') " +
+                                        $"THEN TRUNCATE TABLE {_options.Events.DatabaseSchemaName}.mt_streams CASCADE; END IF; " +
+                                        "END; $$;");
                 connection.Commit();
             }
         }

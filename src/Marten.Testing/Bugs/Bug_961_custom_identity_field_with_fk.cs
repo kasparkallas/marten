@@ -1,9 +1,10 @@
-﻿using System;
+using System;
+using Marten.Testing.Harness;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_961_custom_identity_field_with_fk : IntegratedFixture
+    public class Bug_961_custom_identity_field_with_fk: BugIntegrationContext
     {
         public class FkTarget
         {
@@ -28,5 +29,6 @@ namespace Marten.Testing.Bugs
 
             theStore.Schema.ApplyAllConfiguredChangesToDatabase();
         }
+
     }
 }

@@ -1,11 +1,13 @@
 ﻿using System.Threading.Tasks;
+using Marten.Testing.Documents;
 using Marten.Testing.Examples;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.MultiTenancy
 {
-    public class fetch_tenant_id_as_part_of_metadata : IntegratedFixture
+    public class fetch_tenant_id_as_part_of_metadata : IntegrationContext
     {
         [Fact]
         public void tenant_id_on_metadata()
@@ -22,7 +24,9 @@ namespace Marten.Testing.MultiTenancy
             theStore.BulkInsert("Green", new User[] {user1});
             theStore.BulkInsert("Purple", new User[] {user2});
 
-            theStore.Tenancy.Default.MetadataFor(user1)
+            using var session = theStore.QuerySession();
+
+            session.MetadataFor(user1)
                 .TenantId.ShouldBe("Green");
         }
 
@@ -41,9 +45,15 @@ namespace Marten.Testing.MultiTenancy
             theStore.BulkInsert("Green", new User[] { user1 });
             theStore.BulkInsert("Purple", new User[] { user2 });
 
-            var metadata = await theStore.Tenancy.Default.MetadataForAsync(user1);
+            using var session = theStore.QuerySession();
+
+            var metadata = await session.MetadataForAsync(user1);
             metadata.TenantId.ShouldBe("Green");
 
+        }
+
+        public fetch_tenant_id_as_part_of_metadata(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

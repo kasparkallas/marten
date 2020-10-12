@@ -1,15 +1,16 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Marten.Linq;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_606_string_contains_starts_or_ends_with_in_compiled_queries : IntegratedFixture
+    public class Bug_606_string_contains_starts_or_ends_with_in_compiled_queries: IntegrationContext
     {
         [Fact]
         public void compiled_query_with_ends_with()
@@ -19,7 +20,7 @@ namespace Marten.Testing.Bugs
             query.Parameters[0].Value.ShouldBe("%foo.com");
         }
 
-        public class WhereUsernameEndsWith : ICompiledListQuery<User, User>
+        public class WhereUsernameEndsWith: ICompiledListQuery<User, User>
         {
             public string EndsWith { get; }
 
@@ -28,7 +29,7 @@ namespace Marten.Testing.Bugs
                 EndsWith = endsWith;
             }
 
-            public Expression<Func<IQueryable<User>, IEnumerable<User>>> QueryIs()
+            public Expression<Func<IMartenQueryable<User>, IEnumerable<User>>> QueryIs()
             {
                 return q => q.Where(u => u.UserName.EndsWith(EndsWith));
             }
@@ -42,7 +43,7 @@ namespace Marten.Testing.Bugs
             query.Parameters[0].Value.ShouldBe("foo.com%");
         }
 
-        public class WhereUsernameStartsWith : ICompiledListQuery<User, User>
+        public class WhereUsernameStartsWith: ICompiledListQuery<User, User>
         {
             public string StartsWith { get; }
 
@@ -51,7 +52,7 @@ namespace Marten.Testing.Bugs
                 StartsWith = startsWith;
             }
 
-            public Expression<Func<IQueryable<User>, IEnumerable<User>>> QueryIs()
+            public Expression<Func<IMartenQueryable<User>, IEnumerable<User>>> QueryIs()
             {
                 return q => q.Where(u => u.UserName.StartsWith(StartsWith));
             }
@@ -65,7 +66,7 @@ namespace Marten.Testing.Bugs
             query.Parameters[0].Value.ShouldBe("%foo.com%");
         }
 
-        public class WhereUsernameContains : ICompiledListQuery<User, User>
+        public class WhereUsernameContains: ICompiledListQuery<User, User>
         {
             public string Contains { get; }
 
@@ -74,10 +75,14 @@ namespace Marten.Testing.Bugs
                 Contains = contains;
             }
 
-            public Expression<Func<IQueryable<User>, IEnumerable<User>>> QueryIs()
+            public Expression<Func<IMartenQueryable<User>, IEnumerable<User>>> QueryIs()
             {
                 return q => q.Where(u => u.UserName.Contains(Contains));
             }
+        }
+
+        public Bug_606_string_contains_starts_or_ends_with_in_compiled_queries(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

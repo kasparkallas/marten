@@ -1,9 +1,9 @@
 using System;
 using System.Data.Common;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Baseline;
+using Marten.Exceptions;
 using Marten.Linq;
 using Marten.Schema;
 using Marten.Services;
@@ -13,7 +13,7 @@ using Npgsql;
 
 namespace Marten.Events
 {
-    internal class EventSelector : IEventSelector
+    internal class EventSelector: IEventSelector
     {
         public EventGraph Events { get; }
         private readonly ISerializer _serializer;
@@ -24,12 +24,12 @@ namespace Marten.Events
             _serializer = serializer;
         }
 
-        public IEvent Resolve(DbDataReader reader, IIdentityMap map, QueryStatistics stats)
+        public IEvent Resolve(DbDataReader reader)
         {
             var id = reader.GetGuid(0);
             var eventTypeName = reader.GetString(1);
             var version = reader.GetInt32(2);
-        
+
             var mapping = Events.EventMappingFor(eventTypeName);
 
             if (mapping == null)
@@ -49,7 +49,7 @@ namespace Marten.Events
 
             var sequence = reader.GetFieldValue<long>(4);
             var stream = reader.GetFieldValue<Guid>(5);
-            var timestamp = reader.GetFieldValue<DateTimeOffset>(6);
+            var timestamp = reader.GetValue(6).MapToDateTimeOffset();
             var tenantId = reader.GetFieldValue<string>(7);
 
             var @event = EventStream.ToEvent(data);
@@ -60,16 +60,15 @@ namespace Marten.Events
             @event.Timestamp = timestamp;
             @event.TenantId = tenantId;
 
-
             return @event;
         }
 
-        public async Task<IEvent> ResolveAsync(DbDataReader reader, IIdentityMap map, QueryStatistics stats, CancellationToken token)
+        public async Task<IEvent> ResolveAsync(DbDataReader reader, CancellationToken token)
         {
             var id = await reader.GetFieldValueAsync<Guid>(0, token).ConfigureAwait(false);
             var eventTypeName = await reader.GetFieldValueAsync<string>(1, token).ConfigureAwait(false);
             var version = await reader.GetFieldValueAsync<int>(2, token).ConfigureAwait(false);
-           
+
             var mapping = Events.EventMappingFor(eventTypeName);
 
             if (mapping == null)
@@ -80,7 +79,7 @@ namespace Marten.Events
                     throw new UnknownEventTypeException(eventTypeName);
                 }
                 Type type;
-                try 
+                try
                 {
                     type = Events.TypeForDotNetName(dotnetTypeName);
                 }
@@ -96,7 +95,7 @@ namespace Marten.Events
 
             var sequence = await reader.GetFieldValueAsync<long>(4, token).ConfigureAwait(false);
             var stream = await reader.GetFieldValueAsync<Guid>(5, token).ConfigureAwait(false);
-            var timestamp = await reader.GetFieldValueAsync<DateTimeOffset>(6, token).ConfigureAwait(false);
+            var timestamp = (await reader.GetFieldValueAsync<object>(6, token).ConfigureAwait(false)).MapToDateTimeOffset();
             var tenantId = await reader.GetFieldValueAsync<string>(7, token).ConfigureAwait(false);
 
             var @event = EventStream.ToEvent(data);
@@ -112,14 +111,16 @@ namespace Marten.Events
 
         public string[] SelectFields()
         {
-            return new[] {"id", "type", "version", "data", "seq_id", "stream_id", "timestamp", TenantIdColumn.Name, DocumentMapping.DotNetTypeColumn};
+            return new[] { "id", "type", "version", "data", "seq_id", "stream_id", "timestamp", TenantIdColumn.Name, SchemaConstants.DotNetTypeColumn };
         }
 
-        public void WriteSelectClause(CommandBuilder sql, IQueryableDocument mapping)
+        public void WriteSelectClause(CommandBuilder sql)
         {
-            sql.Append($"select id, type, version, data, seq_id, stream_id, timestamp, tenant_id, {DocumentMapping.DotNetTypeColumn} from ");
+            sql.Append($"select id, type, version, data, seq_id, stream_id, timestamp, tenant_id, {SchemaConstants.DotNetTypeColumn} from ");
             sql.Append(Events.DatabaseSchemaName);
             sql.Append(".mt_events as d");
         }
+
+
     }
 }

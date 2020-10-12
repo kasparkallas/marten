@@ -1,22 +1,22 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Marten.Schema;
 using Marten.Services;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Acceptance
 {
-    public class assigning_versions_to_documents
+    [Collection("acceptance")]
+    public class assigning_versions_to_documents : OneOffConfigurationsContext
     {
-
         [Fact]
         public void no_version_member_by_default()
         {
-            DocumentMapping.For<User>().VersionMember.ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(DocumentMapping.For<User>().Metadata.Version.Member);
         }
 
         [Fact]
@@ -30,7 +30,8 @@ namespace Marten.Testing.Acceptance
         public void version_member_set_by_attribute()
         {
             DocumentMapping.For<AttVersionedDoc>()
-                .VersionMember.Name.ShouldBe("Version");
+                .Metadata
+                .Version.Member.Name.ShouldBe("Version");
         }
 
         [Fact]
@@ -45,21 +46,22 @@ namespace Marten.Testing.Acceptance
         [Fact]
         public void set_the_version_member_through_the_fluent_interface()
         {
-            using (var store = TestingDocumentStore.For(_ =>
+            using (var store = SeparateStore(_ =>
             {
                 _.Schema.For<DocThatCouldBeVersioned>().VersionedWith(x => x.Revision);
             }))
             {
                 store.Storage.MappingFor(typeof(DocThatCouldBeVersioned))
-                    .VersionMember.Name.ShouldBe(nameof(DocThatCouldBeVersioned.Revision));
+                    .Metadata.Version.Member.Name.ShouldBe(nameof(DocThatCouldBeVersioned.Revision));
             }
         }
 
-        
+        public assigning_versions_to_documents() : base("acceptance")
+        {
+        }
     }
 
-    
-    public class end_to_end_versioned_docs : IntegratedFixture
+    public class end_to_end_versioned_docs: IntegrationContext
     {
         [Fact]
         public void save_initial_version_of_the_doc_and_see_the_initial_version_assigned()
@@ -148,8 +150,6 @@ namespace Marten.Testing.Acceptance
                 session1?.Dispose();
                 session2?.Dispose();
             }
-
- 
         }
 
         [Fact]
@@ -201,8 +201,6 @@ namespace Marten.Testing.Acceptance
                 session1?.Dispose();
                 session2?.Dispose();
             }
-
-
         }
 
         [Fact]
@@ -254,44 +252,11 @@ namespace Marten.Testing.Acceptance
                 session1?.Dispose();
                 session2?.Dispose();
             }
-
-
         }
 
-        [Fact]
-        public void versions_are_assigned_during_bulk_inserts_as_field()
+        public end_to_end_versioned_docs(DefaultStoreFixture fixture) : base(fixture)
         {
-            var docs = new AttVersionedDoc[100];
-            for (int i = 0; i < docs.Length; i++)
-            {
-                docs[i] = new AttVersionedDoc();
-            }
-
-            theStore.BulkInsert(docs);
-
-            foreach (var doc in docs)
-            {
-                doc.Version.ShouldNotBe(Guid.Empty);
-            }
         }
-
-        [Fact]
-        public void versions_are_assigned_during_bulk_inserts_as_prop()
-        {
-            var docs = new PropVersionedDoc[100];
-            for (int i = 0; i < docs.Length; i++)
-            {
-                docs[i] = new PropVersionedDoc();
-            }
-
-            theStore.BulkInsert(docs);
-
-            foreach (var doc in docs)
-            {
-                doc.Version.ShouldNotBe(Guid.Empty);
-            }
-        }
-
     }
 
     public class DocThatCouldBeVersioned

@@ -1,35 +1,33 @@
-﻿using System;
+using System;
 using System.Threading.Tasks;
 using Marten.Events;
 using Marten.Services;
 using Marten.Testing.Events.Projections;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events
 {
-
-    public class fetch_a_single_event_with_metadata : DocumentSessionFixture<NulloIdentityMap>
+    public class fetch_a_single_event_with_metadata: IntegrationContext
     {
-        QuestStarted started = new QuestStarted { Name = "Find the Orb" };
-        MembersJoined joined = new MembersJoined { Day = 2, Location = "Faldor's Farm", Members = new string[] { "Garion", "Polgara", "Belgarath" } };
-        MonsterSlayed slayed1 = new MonsterSlayed { Name = "Troll" };
-        MonsterSlayed slayed2 = new MonsterSlayed { Name = "Dragon" };
+        private QuestStarted started = new QuestStarted { Name = "Find the Orb" };
+        private MembersJoined joined = new MembersJoined { Day = 2, Location = "Faldor's Farm", Members = new string[] { "Garion", "Polgara", "Belgarath" } };
+        private MonsterSlayed slayed1 = new MonsterSlayed { Name = "Troll" };
+        private MonsterSlayed slayed2 = new MonsterSlayed { Name = "Dragon" };
 
-        MembersJoined joined2 = new MembersJoined { Day = 5, Location = "Sendaria", Members = new string[] { "Silk", "Barak" } };
-
+        private MembersJoined joined2 = new MembersJoined { Day = 5, Location = "Sendaria", Members = new string[] { "Silk", "Barak" } };
 
         [Fact]
         public void fetch_synchronously()
         {
-
             var streamId = theSession.Events
                 .StartStream<QuestParty>(started, joined, slayed1, slayed2, joined2).Id;
             theSession.SaveChanges();
 
             var events = theSession.Events.FetchStream(streamId);
 
-            theSession.Events.Load(Guid.NewGuid()).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull(theSession.Events.Load(Guid.NewGuid()));
 
             // Knowing the event type
             var slayed1_2 = theSession.Events.Load<MonsterSlayed>(events[2].Id);
@@ -45,15 +43,14 @@ namespace Marten.Testing.Events
         [Fact]
         public async Task fetch_asynchronously()
         {
-
             var streamId = theSession.Events
                 .StartStream<QuestParty>(started, joined, slayed1, slayed2, joined2).Id;
             await theSession.SaveChangesAsync().ConfigureAwait(false);
 
             var events = theSession.Events.FetchStream(streamId);
 
-            (await theSession.Events.LoadAsync(Guid.NewGuid()).ConfigureAwait(false)).ShouldBeNull();
-            (await theSession.Events.LoadAsync<MonsterSlayed>(Guid.NewGuid()).ConfigureAwait(false)).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await theSession.Events.LoadAsync(Guid.NewGuid()).ConfigureAwait(false)));
+            SpecificationExtensions.ShouldBeNull((await theSession.Events.LoadAsync<MonsterSlayed>(Guid.NewGuid()).ConfigureAwait(false)));
 
             // Knowing the event type
             var slayed1_2 = await theSession.Events.LoadAsync<MonsterSlayed>(events[2].Id).ConfigureAwait(false);
@@ -89,7 +86,11 @@ namespace Marten.Testing.Events
             (await slayed2_2.ConfigureAwait(false)).ShouldBeOfType<Event<MonsterSlayed>>()
                 .Data.Name.ShouldBe("Dragon");
 
-            (await missing.ConfigureAwait(false)).ShouldBeNull();
+            SpecificationExtensions.ShouldBeNull((await missing.ConfigureAwait(false)));
+        }
+
+        public fetch_a_single_event_with_metadata(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

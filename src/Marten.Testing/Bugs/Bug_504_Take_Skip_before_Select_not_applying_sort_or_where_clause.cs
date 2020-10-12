@@ -1,22 +1,24 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Marten.Linq;
 using Marten.Services;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_504_Take_Skip_before_Select_not_applying_sort_or_where_clause :
-        DocumentSessionFixture<NulloIdentityMap>
+    public class Bug_504_Take_Skip_before_Select_not_applying_sort_or_where_clause:
+        IntegrationContext
     {
         private IEnumerable<Target> Make(int count)
         {
             for (var i = 0; i < count; i++)
             {
-                var mod2 = i%2 == 0;
-                var mod3 = i%3 == 0;
+                var mod2 = i % 2 == 0;
+                var mod3 = i % 3 == 0;
                 var color = mod3 ? Colors.Red : mod2 ? Colors.Blue : Colors.Green;
 
                 yield return new Target
@@ -73,6 +75,10 @@ namespace Marten.Testing.Bugs
 
             stats.TotalResults.ShouldBe(33);
             queryable.Count.ShouldBe(10);
+        }
+
+        public Bug_504_Take_Skip_before_Select_not_applying_sort_or_where_clause(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

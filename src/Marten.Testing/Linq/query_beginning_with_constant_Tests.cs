@@ -1,12 +1,17 @@
 using System.Linq;
 using Marten.Services;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace Marten.Testing.Linq
 {
     [ControlledQueryStoryteller]
-    public class query_beginning_with_equal_to_value_Tests : DocumentSessionFixture<NulloIdentityMap>
+    public class query_beginning_with_equal_to_value_Tests : IntegrationContext
     {
+        private readonly ITestOutputHelper _output;
+
         [Fact]
         public void start_with_constant()
         {
@@ -83,6 +88,11 @@ namespace Marten.Testing.Linq
             theSession.Query<Target>().Where(x => obj.Number == x.Number).ToArray()
                 .Select(x => x.Number)
                 .ShouldHaveTheSameElementsAs(2);
+        }
+
+        public query_beginning_with_equal_to_value_Tests(DefaultStoreFixture fixture, ITestOutputHelper output) : base(fixture)
+        {
+            _output = output;
         }
     }
 }

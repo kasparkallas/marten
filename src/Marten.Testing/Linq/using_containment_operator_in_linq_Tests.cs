@@ -1,14 +1,17 @@
 ﻿using System.Linq;
 using Marten.Services;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Linq
 {
-    public class using_containment_operator_in_linq_Tests : DocumentSessionFixture<IdentityMap>
+    public class using_containment_operator_in_linq_Tests : IntegrationContext
     {
-        public using_containment_operator_in_linq_Tests()
+        public using_containment_operator_in_linq_Tests(DefaultStoreFixture fixture) : base(fixture)
         {
+            DocumentTracking = DocumentTracking.IdentityOnly;
             StoreOptions(_ => { _.Schema.For<Target>().GinIndexJsonData(); });
         }
 
@@ -23,7 +26,7 @@ namespace Marten.Testing.Linq
             var actual = theSession.Query<Target>().Where(x => x.Date == targets.ElementAt(2).Date)
                 .ToArray();
 
-            actual.Length.ShouldBeGreaterThan(0);
+            SpecificationExtensions.ShouldBeGreaterThan(actual.Length, 0);
 
 
             actual.ShouldContain(targets.ElementAt(2));
@@ -60,9 +63,9 @@ namespace Marten.Testing.Linq
         }
     }
 
-    public class using_containment_operator_in_linq_with_camel_casing_Tests : DocumentSessionFixture<IdentityMap>
+    public class using_containment_operator_in_linq_with_camel_casing_Tests : IntegrationContext
     {
-        public using_containment_operator_in_linq_with_camel_casing_Tests()
+        public using_containment_operator_in_linq_with_camel_casing_Tests(DefaultStoreFixture fixture) : base(fixture)
         {
             StoreOptions(_ =>
             {
@@ -75,6 +78,8 @@ namespace Marten.Testing.Linq
         [Fact]
         public void query_by_date()
         {
+            DocumentTracking = DocumentTracking.IdentityOnly;
+
             var targets = Target.GenerateRandomData(6).ToArray();
             theSession.Store(targets);
 
@@ -83,7 +88,7 @@ namespace Marten.Testing.Linq
             var actual = theSession.Query<Target>().Where(x => x.Date == targets.ElementAt(2).Date)
                 .ToArray();
 
-            actual.Length.ShouldBeGreaterThan(0);
+            SpecificationExtensions.ShouldBeGreaterThan(actual.Length, 0);
 
 
             actual.ShouldContain(targets.ElementAt(2));

@@ -1,13 +1,14 @@
-﻿using System;
+using System;
 using Baseline;
 using Marten.Schema;
 using Marten.Schema.Identity;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Acceptance
 {
-    public class using_natural_identity_keys : IntegratedFixture
+    public class using_natural_identity_keys: IntegrationContext
     {
         [Fact]
         public void finds_the_id_member_with_the_attribute_on_a_field()
@@ -24,9 +25,16 @@ namespace Marten.Testing.Acceptance
         }
 
         [Fact]
+        public void finds_the_right_id_member_for_doc_with_both_id_column_and_identity_attribute()
+        {
+            var mapping = DocumentMapping.For<IdAndIdentityAttDoc>();
+            mapping.IdMember.Name.ShouldBe(nameof(IdAndIdentityAttDoc.DocumentId));
+        }
+
+        [Fact]
         public void can_persist_with_natural_key()
         {
-            var doc = new NonStandardDoc {Name = "somebody"};
+            var doc = new NonStandardDoc { Name = "somebody" };
 
             using (var session = theStore.OpenSession())
             {
@@ -36,13 +44,13 @@ namespace Marten.Testing.Acceptance
 
             using (var query = theStore.QuerySession())
             {
-                query.Load<NonStandardDoc>("somebody").ShouldNotBeNull();
+                SpecificationExtensions.ShouldNotBeNull(query.Load<NonStandardDoc>("somebody"));
             }
         }
 
         [Fact]
         public void can_override_the_identity_member_with_the_fluent_interface()
-        {            
+        {
             StoreOptions(storeOptions =>
             {
                 // SAMPLE: sample-override-id-fluent-interance
@@ -55,6 +63,10 @@ namespace Marten.Testing.Acceptance
             mapping.IdMember.Name.ShouldBe(nameof(OverriddenIdDoc.Name));
             mapping.IdStrategy.ShouldBeOfType<StringIdGeneration>();
         }
+
+        public using_natural_identity_keys(DefaultStoreFixture fixture) : base(fixture)
+        {
+        }
     }
 
     // SAMPLE: IdentityAttribute
@@ -63,6 +75,7 @@ namespace Marten.Testing.Acceptance
         [Identity]
         public string Name;
     }
+
     // ENDSAMPLE
 
     public class NonStandardWithProp
@@ -76,5 +89,13 @@ namespace Marten.Testing.Acceptance
         public string Name { get; set; }
 
         public DateTime Date { get; set; }
+    }
+
+    public class IdAndIdentityAttDoc
+    {
+        public Guid Id { get; set; }
+
+        [Identity]
+        public Guid DocumentId { get; set; }
     }
 }

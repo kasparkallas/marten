@@ -1,25 +1,34 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using Marten.Linq.SoftDeletes;
-using Marten.Schema;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Marten.Util;
 using Shouldly;
 using Xunit;
-using System.Collections.Generic;
 
 namespace Marten.Testing.Acceptance
 {
-    public class soft_deletes : IntegratedFixture
+    public class SoftDeletedFixture: StoreFixture
     {
-
-        public soft_deletes()
+        public SoftDeletedFixture() : base("softdelete")
         {
-            StoreOptions(_ =>
-            {
-                _.Schema.For<User>().SoftDeletedWithIndex();
-                _.Schema.For<File>().SoftDeleted();
-            });
+            Options.Schema.For<User>().SoftDeletedWithIndex();
+            Options.Schema.For<File>().SoftDeleted().MapIsSoftDeletedTo(x => x.Deleted).MapSoftDeletedAtTo(x => x.DeletedAt);
+
+            Options.Schema.For<User>()
+                .SoftDeleted()
+                .AddSubClass<AdminUser>()
+                .AddSubClass<SuperUser>();
+        }
+    }
+
+    public class soft_deletes: StoreContext<SoftDeletedFixture>, IClassFixture<SoftDeletedFixture>
+    {
+        public soft_deletes(SoftDeletedFixture fixture): base(fixture)
+        {
+            theStore.Advanced.Clean.DeleteAllDocuments();
         }
 
         [Fact]
@@ -27,7 +36,6 @@ namespace Marten.Testing.Acceptance
         {
             using (var session = theStore.OpenSession())
             {
-
                 var user = new User();
                 session.Store(user);
                 session.SaveChanges();
@@ -39,7 +47,7 @@ namespace Marten.Testing.Acceptance
         private static void userIsNotMarkedAsDeleted(IDocumentSession session, Guid userId)
         {
             var cmd = session.Connection.CreateCommand()
-                .Sql("select mt_deleted, mt_deleted_at from public.mt_doc_user where id = :id")
+                .Sql("select mt_deleted, mt_deleted_at from softdelete.mt_doc_user where id = :id")
                 .With("id", userId);
 
             using (var reader = cmd.ExecuteReader())
@@ -56,7 +64,6 @@ namespace Marten.Testing.Acceptance
         {
             using (var session = theStore.OpenSession())
             {
-
                 var user = new User();
                 session.Store(user);
                 session.SaveChanges();
@@ -71,7 +78,7 @@ namespace Marten.Testing.Acceptance
         private static void userIsMarkedAsDeleted(IDocumentSession session, Guid userId)
         {
             var cmd = session.Connection.CreateCommand()
-                .Sql("select mt_deleted, mt_deleted_at from public.mt_doc_user where id = :id")
+                .Sql("select mt_deleted, mt_deleted_at from softdelete.mt_doc_user where id = :id")
                 .With("id", userId);
 
             using (var reader = cmd.ExecuteReader())
@@ -131,6 +138,7 @@ namespace Marten.Testing.Acceptance
                 .ToList().Single().UserName.ShouldBe("foo");
             }
         }
+
         // ENDSAMPLE
 
         // SAMPLE: query_maybe_soft_deleted_docs
@@ -162,6 +170,7 @@ namespace Marten.Testing.Acceptance
                     .ShouldHaveTheSameElementsAs("bar", "baz", "foo");
             }
         }
+
         // ENDSAMPLE
 
         // SAMPLE: query_is_soft_deleted_docs
@@ -193,6 +202,7 @@ namespace Marten.Testing.Acceptance
                     .Single().ShouldBe("bar");
             }
         }
+
         // ENDSAMPLE
 
         // SAMPLE: query_soft_deleted_since
@@ -212,7 +222,7 @@ namespace Marten.Testing.Acceptance
                 session.Delete(user3);
                 session.SaveChanges();
 
-                var epoch = session.DocumentStore.Tenancy.Default.MetadataFor(user3).DeletedAt;
+                var epoch = session.MetadataFor(user3).DeletedAt;
                 session.Delete(user4);
                 session.SaveChanges();
 
@@ -220,6 +230,7 @@ namespace Marten.Testing.Acceptance
                     .ToList().ShouldHaveTheSameElementsAs("jack");
             }
         }
+
         // ENDSAMPLE
 
         [Fact]
@@ -241,7 +252,7 @@ namespace Marten.Testing.Acceptance
                 session.Delete(user4);
                 session.SaveChanges();
 
-                var epoch = session.DocumentStore.Tenancy.Default.MetadataFor(user4).DeletedAt;
+                var epoch = session.MetadataFor(user4).DeletedAt;
 
                 session.Query<User>().Where(x => x.DeletedBefore(epoch.Value)).Select(x => x.UserName)
                     .ToList().ShouldHaveTheSameElementsAs("baz");
@@ -251,13 +262,7 @@ namespace Marten.Testing.Acceptance
         [Fact]
         public void top_level_of_hierarchy()
         {
-            StoreOptions(_ =>
-            {
-                _.Schema.For<User>()
-                    .SoftDeleted()
-                    .AddSubClass<AdminUser>()
-                    .AddSubClass<SuperUser>();
-            });
+
 
             var user1 = new User { UserName = "foo" };
             var user2 = new User { UserName = "bar" };
@@ -282,17 +287,9 @@ namespace Marten.Testing.Acceptance
             }
         }
 
-
         [Fact]
         public void sub_level_of_hierarchy()
         {
-            StoreOptions(_ =>
-            {
-                _.Schema.For<User>()
-                    .SoftDeleted()
-                    .AddSubClass<AdminUser>()
-                    .AddSubClass<SuperUser>();
-            });
 
             var user1 = new SuperUser { UserName = "foo" };
             var user2 = new SuperUser { UserName = "bar" };
@@ -321,13 +318,6 @@ namespace Marten.Testing.Acceptance
         [Fact]
         public void sub_level_of_hierarchy_maybe_deleted()
         {
-            StoreOptions(_ =>
-            {
-                _.Schema.For<User>()
-                    .SoftDeleted()
-                    .AddSubClass<AdminUser>()
-                    .AddSubClass<SuperUser>();
-            });
 
             var user1 = new SuperUser { UserName = "foo" };
             var user2 = new SuperUser { UserName = "bar" };
@@ -355,17 +345,9 @@ namespace Marten.Testing.Acceptance
             }
         }
 
-
         [Fact]
         public void sub_level_of_hierarchy_is_deleted()
         {
-            StoreOptions(_ =>
-            {
-                _.Schema.For<User>()
-                    .SoftDeleted()
-                    .AddSubClass<AdminUser>()
-                    .AddSubClass<SuperUser>();
-            });
 
             var user1 = new SuperUser { UserName = "foo" };
             var user2 = new SuperUser { UserName = "bar" };
@@ -421,12 +403,15 @@ namespace Marten.Testing.Acceptance
                 files.Count.ShouldBe(1);
             }
         }
-
-        public class File
-        {
-            public Guid Id { get; set; } = Guid.NewGuid();
-            public Guid UserId { get; set; }
-            public string Path { get; set; }
-        }
     }
+
+    public class File
+    {
+        public Guid Id { get; set; } = Guid.NewGuid();
+        public Guid UserId { get; set; }
+        public string Path { get; set; }
+        public bool Deleted { get; set; }
+        public DateTimeOffset? DeletedAt { get; set; }
+    }
+
 }

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Reflection;
 using Baseline;
 using Marten.Events;
@@ -6,6 +6,7 @@ using Marten.Events.Projections;
 using Marten.Services;
 using Marten.Services.Events;
 using Marten.Testing.Events.Projections;
+using Marten.Testing.Harness;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Serialization;
 using Shouldly;
@@ -13,10 +14,10 @@ using Xunit;
 
 namespace Marten.Testing.Events
 {
-    public class CustomAggregatorLookupTests : DocumentSessionFixture<NulloIdentityMap>
-    {        
-        public CustomAggregatorLookupTests()
-        {            
+    public class CustomAggregatorLookupTests: IntegrationContext
+    {
+        public CustomAggregatorLookupTests(DefaultStoreFixture fixture) : base(fixture)
+        {
             StoreOptions(options =>
             {
                 // SAMPLE: scenarios-immutableprojections-storesetup
@@ -33,18 +34,17 @@ namespace Marten.Testing.Events
         public void can_lookup_private_apply_methods()
         {
             var theGraph = new EventGraph(new StoreOptions());
-            theGraph.UseAggregatorLookup(new AggregatorLookup(type => typeof(AggregatorApplyPrivate<>).CloseAndBuildAs<IAggregator>(type)));            
+            theGraph.UseAggregatorLookup(new AggregatorLookup(type => typeof(AggregatorApplyPrivate<>).CloseAndBuildAs<IAggregator>(type)));
 
             var aggregator = theGraph.AggregateFor<AggregateWithPrivateEventApply>();
 
             var stream = new EventStream(Guid.NewGuid(), false)
-                .Add(new QuestStarted {Name = "Destroy the Ring"});                
+                .Add(new QuestStarted { Name = "Destroy the Ring" });
 
             var party = aggregator.Build(stream.Events, null);
 
             party.Name.ShouldBe("Destroy the Ring");
         }
-
 
         [Fact]
         public void can_set_private_apply_aggregator_through_extension_methods_and_strategy()
@@ -88,7 +88,7 @@ namespace Marten.Testing.Events
         public void can_set_aggregator_through_extension_methods_and_strategy()
         {
             var theGraph = new EventGraph(new StoreOptions());
-            theGraph.UseAggregatorLookup(AggregationLookupStrategy.UsePublicApply);            
+            theGraph.UseAggregatorLookup(AggregationLookupStrategy.UsePublicApply);
 
             var aggregator = theGraph.AggregateFor<QuestParty>();
 
@@ -104,7 +104,7 @@ namespace Marten.Testing.Events
         public void can_use_custom_aggregator_with_inline_projection()
         {
             // SAMPLE: scenarios-immutableprojections-projectstream
-            var quest = new QuestStarted {Name = "Destroy the Ring"};
+            var quest = new QuestStarted { Name = "Destroy the Ring" };
             var questId = Guid.NewGuid();
             theSession.Events.StartStream<QuestParty>(questId, quest);
             theSession.SaveChanges();
@@ -113,7 +113,7 @@ namespace Marten.Testing.Events
             projection.Name.ShouldBe("Destroy the Ring");
             // ENDSAMPLE
 
-            theSession.Events.FetchStreamState(questId).ShouldNotBeNull();
+            SpecificationExtensions.ShouldNotBeNull(theSession.Events.FetchStreamState(questId));
         }
     }
 
@@ -121,7 +121,7 @@ namespace Marten.Testing.Events
     public class AggregateWithPrivateEventApply
     {
         public Guid Id { get; private set; }
-        
+
         private void Apply(QuestStarted started)
         {
             Name = started.Name;
@@ -134,15 +134,16 @@ namespace Marten.Testing.Events
 
         public string Name { get; private set; }
     }
+
     // ENDSAMPLE
 
     // SAMPLE: scenarios-immutableprojections-serializer
-    internal class ResolvePrivateSetters : DefaultContractResolver
+    internal class ResolvePrivateSetters: DefaultContractResolver
     {
         protected override JsonProperty CreateProperty(
             MemberInfo member,
             MemberSerialization memberSerialization)
-        {            
+        {
             var prop = base.CreateProperty(member, memberSerialization);
 
             if (!prop.Writable)
@@ -158,5 +159,6 @@ namespace Marten.Testing.Events
             return prop;
         }
     }
+
     // ENDSAMPLE
 }

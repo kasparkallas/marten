@@ -1,27 +1,22 @@
-using System;
 using System.Data.Common;
 using System.Threading;
 using System.Threading.Tasks;
+using Marten.Internal;
 using Marten.Linq;
 using Marten.Linq.QueryHandlers;
-using Marten.Schema;
-using Npgsql;
 
 namespace Marten.Services.BatchQuerying
 {
-    public class BatchQueryItem<T> : IBatchQueryItem
+    public class BatchQueryItem<T>: IBatchQueryItem
     {
         private readonly IQueryHandler<T> _handler;
 
-        public BatchQueryItem(IQueryHandler<T> handler, QueryStatistics stats)
+        public BatchQueryItem(IQueryHandler<T> handler)
         {
             _handler = handler;
 
             Completion = new TaskCompletionSource<T>();
-            Stats = stats;
         }
-
-        public QueryStatistics Stats { get; }
 
 
         public TaskCompletionSource<T> Completion { get; }
@@ -29,17 +24,16 @@ namespace Marten.Services.BatchQuerying
 
         public IQueryHandler Handler => _handler;
 
-        public async Task Read(DbDataReader reader, IIdentityMap map, CancellationToken token)
+        public async Task ReadAsync(DbDataReader reader, IMartenSession session, CancellationToken token)
         {
-            var result = await _handler.HandleAsync(reader, map, Stats, token).ConfigureAwait(false);
+            var result = await _handler.HandleAsync(reader, session, token).ConfigureAwait(false);
             Completion.SetResult(result);
         }
 
-        public void Read(DbDataReader reader, IIdentityMap map)
+        public void Read(DbDataReader reader, IMartenSession session)
         {
-            var result = _handler.Handle(reader, map, Stats);
+            var result = _handler.Handle(reader, session);
             Completion.SetResult(result);
         }
-
     }
 }

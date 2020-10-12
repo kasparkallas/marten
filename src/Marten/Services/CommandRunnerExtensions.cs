@@ -15,7 +15,8 @@ namespace Marten.Services
     {
         public static int Execute(this IManagedConnection runner, string sql)
         {
-            return runner.Execute(cmd => cmd.WithText(sql).ExecuteNonQuery());
+            var cmd = new NpgsqlCommand(sql);
+            return runner.Execute(cmd);
         }
 
         public static QueryPlan ExplainQuery(this IManagedConnection runner, NpgsqlCommand cmd, Action<IConfigureExplainExpressions> configureExplain = null)
@@ -26,126 +27,58 @@ namespace Marten.Services
             configureExplain?.Invoke(config);
 
             cmd.CommandText = string.Concat($"explain ({config} format json) ", cmd.CommandText);
-            return runner.Execute(cmd, c =>
+            using (var reader = runner.ExecuteReader(cmd))
             {
-                using (var reader = cmd.ExecuteReader())
+                var queryPlans = reader.Read() ? serializer.FromJson<QueryPlanContainer[]>(reader.GetTextReader(0)) : null;
+                var planToReturn = queryPlans?[0].Plan;
+                if (planToReturn != null)
                 {
-                    var queryPlans = reader.Read() ? serializer.FromJson<QueryPlanContainer[]>(reader.GetTextReader(0)) : null;
-                    var planToReturn = queryPlans?[0].Plan;
-                    if (planToReturn != null)
-                    {
-                        planToReturn.PlanningTime = queryPlans[0].PlanningTime;
-                        planToReturn.ExecutionTime = queryPlans[0].ExecutionTime;
-                    }
-                    return planToReturn;
+                    planToReturn.PlanningTime = queryPlans[0].PlanningTime;
+                    planToReturn.ExecutionTime = queryPlans[0].ExecutionTime;
+                    planToReturn.Command = cmd;
                 }
-            });
+                return planToReturn;
+            }
         }
 
-        public static T Fetch<T>(this IManagedConnection runner, IQueryHandler<T> handler, IIdentityMap map, QueryStatistics stats, ITenant tenant)
-        {
-            var command = CommandBuilder.ToCommand(tenant, handler);
-
-            return runner.Execute(command, c =>
-            {
-                using (var reader = command.ExecuteReader())
-                {
-                    return handler.Handle(reader, map, stats);
-                }
-            });
-        }
-
-        public static async Task<T> FetchAsync<T>(this IManagedConnection runner, IQueryHandler<T> handler, IIdentityMap map, QueryStatistics stats, ITenant tenant, CancellationToken token)
-        {
-            var command = CommandBuilder.ToCommand(tenant, handler);
-
-            return await runner.ExecuteAsync(command, async (c, tkn) =>
-            {
-                using (var reader = await command.ExecuteReaderAsync(tkn).ConfigureAwait(false))
-                {
-                    return await handler.HandleAsync(reader, map, stats, tkn).ConfigureAwait(false);
-                }
-            }, token).ConfigureAwait(false);
-        }
-
-        public static IList<T> Resolve<T>(this IManagedConnection runner, NpgsqlCommand cmd, ISelector<T> selector, IIdentityMap map, QueryStatistics stats)
-        {
-            var selectMap = map.ForQuery();
-
-            return runner.Execute(cmd, c =>
-            {
-                var list = new List<T>();
-
-                using (var reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        list.Add(selector.Resolve(reader, selectMap, stats));
-                    }
-                }
-
-                return list;
-            });
-        }
-
-        public static Task<IList<T>> ResolveAsync<T>(this IManagedConnection runner, NpgsqlCommand cmd, ISelector<T> selector, IIdentityMap map, QueryStatistics stats, CancellationToken token)
-        {
-            var selectMap = map.ForQuery();
-
-            return runner.ExecuteAsync(cmd, async (c, tkn) =>
-            {
-                var list = new List<T>();
-                using (var reader = await cmd.ExecuteReaderAsync(tkn).ConfigureAwait(false))
-                {
-                    while (await reader.ReadAsync(tkn).ConfigureAwait(false))
-                    {
-                        list.Add(selector.Resolve(reader, selectMap, stats));
-                    }
-                }
-
-                return list.As<IList<T>>();
-            }, token);
-        }
 
         public static IList<string> GetStringList(this IManagedConnection runner, string sql, params object[] parameters)
         {
             var list = new List<string>();
 
-            runner.Execute(cmd =>
+            var cmd = new NpgsqlCommand();
+            cmd.WithText(sql);
+            parameters.Each(x =>
             {
-                cmd.WithText(sql);
-                parameters.Each(x =>
-                {
-                    var param = cmd.AddParameter(x);
-                    cmd.CommandText = cmd.CommandText.UseParameter(param);
-                });
-
-                using (var reader = cmd.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        list.Add(reader.GetString(0));
-                    }
-
-                    reader.Close();
-                }
+                var param = cmd.AddParameter(x);
+                cmd.CommandText = cmd.CommandText.UseParameter(param);
             });
+
+            using (var reader = runner.ExecuteReader(cmd))
+            {
+                while (reader.Read())
+                {
+                    list.Add(reader.GetString(0));
+                }
+
+                reader.Close();
+            }
 
             return list;
         }
 
         public static T QueryScalar<T>(this IManagedConnection runner, string sql)
         {
-            return runner.Execute(cmd => cmd.WithText(sql).ExecuteScalar().As<T>());
+            var cmd = new NpgsqlCommand(sql);
+            return runner.QueryScalar<T>(cmd);
         }
 
-        public static Task<T> QueryScalarAsync<T>(this IManagedConnection runner, string sql, CancellationToken token)
+        public static T QueryScalar<T>(this IManagedConnection runner, NpgsqlCommand cmd)
         {
-            return runner.ExecuteAsync(async (cmd, tkn) =>
-            {
-                var result = await cmd.WithText(sql).ExecuteScalarAsync(tkn).ConfigureAwait(false);
-                return (T)result;
-            }, token);
+            using var reader = runner.ExecuteReader(cmd);
+
+            return reader.Read() ? reader.GetFieldValue<T>(0) : default;
         }
+
     }
 }

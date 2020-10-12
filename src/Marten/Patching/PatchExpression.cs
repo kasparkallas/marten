@@ -3,27 +3,31 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
 using Baseline;
+using Marten.Internal.Sessions;
 using Marten.Linq;
-using Marten.Schema;
-using Marten.Services;
-using Marten.Storage;
+using Marten.Linq.Parsing;
+using Marten.Linq.SqlGeneration;
+using Marten.Util;
 
 namespace Marten.Patching
 {
-    public class PatchExpression<T> : IPatchExpression<T>
+    public class PatchExpression<T>: IPatchExpression<T>
     {
-        private readonly IWhereFragment _fragment;
-        private readonly ITenant _tenant;
-        private readonly UnitOfWork _unitOfWork;
-        private readonly ISerializer _serializer;
+        private readonly ISqlFragment _filter;
+        private readonly Expression<Func<T, bool>> _filterExpression;
+        private readonly DocumentSessionBase _session;
         public readonly IDictionary<string, object> Patch = new Dictionary<string, object>();
 
-        public PatchExpression(IWhereFragment fragment, ITenant tenant, UnitOfWork unitOfWork, ISerializer serializer)
+        public PatchExpression(ISqlFragment filter, DocumentSessionBase session)
         {
-            _fragment = fragment;
-            _tenant = tenant;
-            _unitOfWork = unitOfWork;
-            _serializer = serializer;
+            _filter = filter;
+            _session = session;
+        }
+
+        public PatchExpression(Expression<Func<T, bool>> filterExpression, DocumentSessionBase session)
+        {
+            _filterExpression = filterExpression;
+            _session = session;
         }
 
         public void Set<TValue>(string name, TValue value)
@@ -41,16 +45,8 @@ namespace Marten.Patching
             set(toPath(expression), value);
         }
 
-        private void set<TValue>(string path, TValue value)
-        {
-            Patch.Add("type", "set");
-            Patch.Add("value", value);
-            Patch.Add("path", path);
-
-            apply();
-        }
-
-        public void Duplicate<TElement>(Expression<Func<T, TElement>> expression, params Expression<Func<T, TElement>>[] destinations)
+        public void Duplicate<TElement>(Expression<Func<T, TElement>> expression,
+            params Expression<Func<T, TElement>>[] destinations)
         {
             if (destinations.Length == 0)
                 throw new ArgumentException("At least one destination must be given");
@@ -104,6 +100,8 @@ namespace Marten.Patching
             Patch.Add("value", element);
             Patch.Add("path", toPath(expression));
 
+            PossiblyPolymorphic = element.GetType() != typeof(TElement);
+
             apply();
         }
 
@@ -112,6 +110,8 @@ namespace Marten.Patching
             Patch.Add("type", "append_if_not_exists");
             Patch.Add("value", element);
             Patch.Add("path", toPath(expression));
+
+            PossiblyPolymorphic = element.GetType() != typeof(TElement);
 
             apply();
         }
@@ -124,6 +124,8 @@ namespace Marten.Patching
             Patch.Add("path", toPath(expression));
             Patch.Add("index", index);
 
+            PossiblyPolymorphic = element.GetType() != typeof(TElement);
+
             apply();
         }
 
@@ -135,16 +137,20 @@ namespace Marten.Patching
             Patch.Add("path", toPath(expression));
             Patch.Add("index", index);
 
+            PossiblyPolymorphic = element.GetType() != typeof(TElement);
+
             apply();
         }
 
-        public void Remove<TElement>(Expression<Func<T, IEnumerable<TElement>>> expression, TElement element, 
+        public void Remove<TElement>(Expression<Func<T, IEnumerable<TElement>>> expression, TElement element,
             RemoveAction action = RemoveAction.RemoveFirst)
         {
             Patch.Add("type", "remove");
             Patch.Add("value", element);
             Patch.Add("path", toPath(expression));
-            Patch.Add("action", (int) action);
+            Patch.Add("action", (int)action);
+
+            PossiblyPolymorphic = element.GetType() != typeof(TElement);
 
             apply();
         }
@@ -182,6 +188,15 @@ namespace Marten.Patching
             delete(toPath(expression));
         }
 
+        private void set<TValue>(string path, TValue value)
+        {
+            Patch.Add("type", "set");
+            Patch.Add("value", value);
+            Patch.Add("path", path);
+
+            apply();
+        }
+
         private void delete(string path)
         {
             Patch.Add("type", "delete");
@@ -195,19 +210,36 @@ namespace Marten.Patching
             var visitor = new FindMembers();
             visitor.Visit(expression);
 
-            return visitor.Members.Select(x => x.Name).Join(".");
+            // TODO -- don't like this. Smells like duplication in logic
+            return visitor.Members.Select(x => x.Name.FormatCase(_session.Serializer.Casing)).Join(".");
         }
+
+        internal bool PossiblyPolymorphic { get; set; } = false;
 
         private void apply()
         {
-            var transform = _tenant.TransformFor(StoreOptions.PatchDoc);
-            var document = _tenant.MappingFor(typeof(T)).ToQueryableDocument();
+            var transform = _session.Tenant.TransformFor(StoreOptions.PatchDoc);
+            var storage = _session.StorageFor(typeof(T));
 
-            var where = document.FilterDocuments(null, _fragment);
+            ISqlFragment where;
+            if (_filter == null)
+            {
+                var statement = new StatementOperation(storage, null);
+                statement.ApplyFiltering(_session, _filterExpression);
 
-            var operation = new PatchOperation(transform, document, where, Patch, _serializer);
+                where = statement.Where;
+            }
+            else
+            {
+                where = storage.FilterDocuments(null, _filter);
+            }
 
-            _unitOfWork.Patch(operation);
+            var operation = new PatchOperation(transform, storage, where, Patch, _session.Serializer)
+            {
+                PossiblyPolymorhpic = PossiblyPolymorphic
+            };
+
+            _session.QueueOperation(operation);
         }
     }
 }

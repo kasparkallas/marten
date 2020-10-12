@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Linq.Expressions;
-using System.Reflection;
 using Marten.Linq.SoftDeletes;
 using Marten.Schema;
 using Marten.Services;
+using Marten.Testing.Harness;
 using Marten.Util;
 using Npgsql;
 using Xunit;
@@ -18,7 +18,7 @@ namespace Marten.Testing.Linq.SoftDeletes
 
         public DeletedSinceParserTests()
         {
-            _mapping = new DocumentMapping(typeof(object), new StoreOptions()) {DeleteStyle = DeleteStyle.SoftDelete};
+            _mapping = new DocumentMapping(typeof(object), new StoreOptions()) { DeleteStyle = DeleteStyle.SoftDelete };
             _expression = Expression.Call(typeof(SoftDeletedExtensions).GetMethod(nameof(SoftDeletedExtensions.DeletedSince)),
                 Expression.Parameter(typeof(object)),
                 Expression.Constant(DateTimeOffset.UtcNow));
@@ -33,7 +33,7 @@ namespace Marten.Testing.Linq.SoftDeletes
             var builder = new CommandBuilder(new NpgsqlCommand());
 
             result.Apply(builder);
-            
+
             builder.ToString().ShouldContain("d.mt_deleted and d.mt_deleted_at >");
         }
 

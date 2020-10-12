@@ -1,7 +1,9 @@
 using System;
 using System.Linq.Expressions;
 using Baseline;
+using Marten.Internal;
 using Marten.Linq;
+using Marten.Linq.SqlGeneration;
 using Marten.Schema;
 using Marten.Storage;
 using Remotion.Linq.Clauses;
@@ -10,7 +12,7 @@ using Remotion.Linq.Clauses.StreamedData;
 
 namespace Marten.Transforms
 {
-    public class TransformToJsonResultOperator : SequenceTypePreservingResultOperatorBase, ISelectableOperator
+    public class TransformToJsonResultOperator: SequenceTypePreservingResultOperatorBase, ISelectableOperator
     {
         private readonly string _transformName;
 
@@ -34,10 +36,18 @@ namespace Marten.Transforms
             return input;
         }
 
-        public ISelector<T> BuildSelector<T>(string dataLocator, ITenant schema, IQueryableDocument document)
+        public SelectorStatement ModifyStatement(SelectorStatement statement, IMartenSession session)
         {
-            var transform = schema.TransformFor(_transformName);
-            return new TransformToJsonSelector(dataLocator, transform, document).As<ISelector<T>>();
+            var transform = session.Tenant.TransformFor(_transformName);
+
+            var clause = new JsonSelectClause(statement.SelectClause)
+            {
+                SelectionText = $"select {transform.Identifier}(d.data) from "
+            };
+
+            statement.SelectClause = clause;
+
+            return statement;
         }
     }
 }

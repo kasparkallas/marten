@@ -1,19 +1,19 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Baseline;
 using Marten.Testing;
 using Marten.Testing.Events;
 using Marten.Testing.Events.Projections;
+using Marten.Testing.Harness;
 using Marten.Util;
 using NpgsqlTypes;
 using StoryTeller;
 using StoryTeller.Grammars.Tables;
-using StructureMap;
 
 namespace Marten.Storyteller.Fixtures.EventStore
 {
-    public class EventStoreFixture : Fixture
+    public class EventStoreFixture: Fixture
     {
         private readonly LightweightCache<string, Guid> _streams = new LightweightCache<string, Guid>();
         private IDocumentStore _store;
@@ -26,11 +26,14 @@ namespace Marten.Storyteller.Fixtures.EventStore
         {
             _streams.ClearAll();
 
-            _store = TestingDocumentStore.Basic();
+            _store = DocumentStore.For(opts =>
+            {
+              opts.Connection(ConnectionSource.ConnectionString);
+              opts.AutoCreateSchemaObjects = AutoCreate.All;
+            });
 
             Context.State.Store(_store);
         }
-
 
         [FormatAs("For a new 'Quest' named {name} that started on {date}")]
         public void ForNewQuestStream(string name, DateTime date)
@@ -93,7 +96,6 @@ namespace Marten.Storyteller.Fixtures.EventStore
             }
         }
 
-
         [Hidden, FormatAs("For version # {version}")]
         public void Version(int version)
         {
@@ -125,7 +127,7 @@ namespace Marten.Storyteller.Fixtures.EventStore
                 switch (_mode)
                 {
                     case "Synchronously":
-                        return session.Events.FetchStream(_lastStream, timestamp:time.ToUniversalTime()).Select(x => x.Data.ToString()).ToArray();
+                        return session.Events.FetchStream(_lastStream, timestamp: time.ToUniversalTime()).Select(x => x.Data.ToString()).ToArray();
 
                     case "Asynchronously":
                         return session.Events.FetchStreamAsync(_lastStream, timestamp: time.ToUniversalTime()).GetAwaiter().GetResult().Select(x => x.Data.ToString()).ToArray();
@@ -228,13 +230,9 @@ namespace Marten.Storyteller.Fixtures.EventStore
                         return value.Result.ToString();
                 }
 
-
-
                 throw new NotImplementedException();
             }
-
         }
-
 
         [FormatAs("Live aggregating to QuestParty at time {timestamp} should be {returnValue}")]
         public string LiveAggregationToQueryPartyByTimestampShouldBe(DateTime timestamp)
@@ -244,7 +242,7 @@ namespace Marten.Storyteller.Fixtures.EventStore
                 switch (_mode)
                 {
                     case "Synchronously":
-                        return session.Events.AggregateStream<QuestParty>(_lastStream, timestamp:timestamp.ToUniversalTime()).ToString();
+                        return session.Events.AggregateStream<QuestParty>(_lastStream, timestamp: timestamp.ToUniversalTime()).ToString();
 
                     case "Asynchronously":
                         return session.Events.AggregateStreamAsync<QuestParty>(_lastStream, timestamp: timestamp.ToUniversalTime()).GetAwaiter().GetResult().ToString();
@@ -257,11 +255,8 @@ namespace Marten.Storyteller.Fixtures.EventStore
                         return value.Result.ToString();
                 }
 
-
-
                 throw new NotImplementedException();
             }
-
         }
 
         [FormatAs("Live aggregating to QuestParty at version {version} should be {returnValue}")]
@@ -287,8 +282,6 @@ namespace Marten.Storyteller.Fixtures.EventStore
             }
 
             throw new NotImplementedException();
-
         }
-
     }
 }

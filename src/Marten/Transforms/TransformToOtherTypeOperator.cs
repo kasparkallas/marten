@@ -1,15 +1,14 @@
 using System;
 using System.Linq.Expressions;
-using Marten.Linq;
-using Marten.Schema;
-using Marten.Storage;
+using Marten.Internal;
+using Marten.Linq.SqlGeneration;
 using Remotion.Linq.Clauses;
 using Remotion.Linq.Clauses.ResultOperators;
 using Remotion.Linq.Clauses.StreamedData;
 
 namespace Marten.Transforms
 {
-    public class TransformToOtherTypeOperator : SequenceTypePreservingResultOperatorBase, ISelectableOperator
+    public class TransformToOtherTypeOperator<T> : SequenceTypePreservingResultOperatorBase, ISelectableOperator
     {
         private readonly string _transformName;
 
@@ -33,11 +32,19 @@ namespace Marten.Transforms
             return input;
         }
 
-        public ISelector<T> BuildSelector<T>(string dataLocator, ITenant schema, IQueryableDocument document)
-        {
-            var transform = schema.TransformFor(_transformName);
 
-            return new TransformToTypeSelector<T>(dataLocator, transform, document);
+        public SelectorStatement ModifyStatement(SelectorStatement statement, IMartenSession session)
+        {
+            var transform = session.Tenant.TransformFor(_transformName);
+
+            var clause = new DataSelectClause<T>(statement.SelectClause.FromObject)
+            {
+                FieldName = $"{transform.Identifier}(d.data)"
+            };
+
+            statement.SelectClause = clause;
+
+            return statement;
         }
     }
 }

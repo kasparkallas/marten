@@ -1,47 +1,111 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection;
 using System.Text.RegularExpressions;
 using Baseline;
 using Npgsql;
+using Npgsql.TypeMapping;
 using NpgsqlTypes;
 
 namespace Marten.Util
 {
     public static class TypeMappings
     {
-        private static readonly Dictionary<Type, string> PgTypes;
-        private static readonly Dictionary<Type, NpgsqlDbType?> TypeToNpgsqlDbType;
+        private static readonly Ref<ImHashMap<Type, string>> PgTypeMemo;
+        private static readonly Ref<ImHashMap<Type, NpgsqlDbType?>> NpgsqlDbTypeMemo;
+        private static readonly Ref<ImHashMap<NpgsqlDbType, Type[]>> TypeMemo;
+
+        public static Func<object, DateTime> CustomMappingToDateTime = null;
+        public static Func<object, DateTimeOffset> CustomMappingToDateTimeOffset = null;
+        public static Func<DateTime, object> CustomMappingFromDateTime = null;
+        public static Func<DateTimeOffset, object> CustomMappingFromDateTimeOffset = null;
+
+        public static List<Type> ContainmentOperatorTypes { get; } = new List<Type>();
+        public static List<Type> TimespanTypes { get; } = new List<Type>();
+        public static List<Type> TimespanZTypes { get; } = new List<Type>();
 
         static TypeMappings()
         {
-            // Create the CLR type to NpgsqlDbType and PgTypeName mapping from exposed INpgsqlTypeMapper.Mappings
-            PgTypes = new Dictionary<Type, string>();
-            TypeToNpgsqlDbType = new Dictionary<Type, NpgsqlDbType?>();
+            // Initialize PgTypeMemo with Types which are not available in Npgsql mappings
+            PgTypeMemo = Ref.Of(ImHashMap<Type, string>.Empty);
 
-            foreach (var mapping in NpgsqlConnection.GlobalTypeMapper.Mappings)
-            {
-                foreach (var t in mapping.ClrTypes)
-                {
-                    TypeToNpgsqlDbType[t] = mapping.NpgsqlDbType;
-                    PgTypes[t] = mapping.PgTypeName;
-                }
-            }
-
-            // Update or add the following PgTypes mappings to be inline with what we had earlier
-            // This is not available in Npgsql mappings
-            PgTypes[typeof(long)] = "bigint";
-            // This is not available in Npgsql mappings
-            PgTypes[typeof(string)] = "varchar";
-            // This is not available in Npgsql mappings
-            PgTypes[typeof(float)] = "decimal";
+            PgTypeMemo.Swap(d => d.AddOrUpdate(typeof(long), "bigint"));
+            PgTypeMemo.Swap(d => d.AddOrUpdate(typeof(string), "varchar"));
+            PgTypeMemo.Swap(d => d.AddOrUpdate(typeof(float), "decimal"));
 
             // Default Npgsql mapping is 'numeric' but we are using 'decimal'
-            PgTypes[typeof(decimal)] = "decimal";
+            PgTypeMemo.Swap(d => d.AddOrUpdate(typeof(decimal), "decimal"));
+
             // Default Npgsql mappings is 'timestamp' but we are using 'timestamp without time zone'
-            PgTypes[typeof (DateTime)] = "timestamp without time zone";
+            PgTypeMemo.Swap(d => d.AddOrUpdate(typeof(DateTime), "timestamp without time zone"));
+
+            NpgsqlDbTypeMemo = Ref.Of(ImHashMap<Type, NpgsqlDbType?>.Empty);
+
+            TypeMemo = Ref.Of(ImHashMap<NpgsqlDbType, Type[]>.Empty);
+
+            AddTimespanTypes(NpgsqlDbType.Timestamp, ResolveTypes(NpgsqlDbType.Timestamp));
+            AddTimespanTypes(NpgsqlDbType.TimestampTz, ResolveTypes(NpgsqlDbType.TimestampTz));
+
+            RegisterMapping(typeof(uint), "oid", NpgsqlDbType.Oid);
         }
+
+        public static void RegisterMapping(Type type, string pgType, NpgsqlDbType? npgsqlDbType)
+        {
+            PgTypeMemo.Swap(d => d.AddOrUpdate(type, pgType));
+            NpgsqlDbTypeMemo.Swap(d => d.AddOrUpdate(type, npgsqlDbType));
+        }
+
+        // Lazily retrieve the CLR type to NpgsqlDbType and PgTypeName mapping from exposed INpgsqlTypeMapper.Mappings.
+        // This is lazily calculated instead of precached because it allows consuming code to register
+        // custom npgsql mappings prior to execution.
+        private static string ResolvePgType(Type type)
+        {
+            if (PgTypeMemo.Value.TryFind(type, out var value))
+                return value;
+
+            value = GetTypeMapping(type)?.PgTypeName;
+
+            PgTypeMemo.Swap(d => d.AddOrUpdate(type, value));
+
+            return value;
+        }
+
+        private static NpgsqlDbType? ResolveNpgsqlDbType(Type type)
+        {
+            if (NpgsqlDbTypeMemo.Value.TryFind(type, out var value))
+                return value;
+
+            value = GetTypeMapping(type)?.NpgsqlDbType;
+
+            NpgsqlDbTypeMemo.Swap(d => d.AddOrUpdate(type, value));
+
+            return value;
+        }
+
+        internal static Type[] ResolveTypes(NpgsqlDbType npgsqlDbType)
+        {
+            if (TypeMemo.Value.TryFind(npgsqlDbType, out var values))
+                return values;
+
+            values = GetTypeMapping(npgsqlDbType)?.ClrTypes;
+
+            TypeMemo.Swap(d => d.AddOrUpdate(npgsqlDbType, values));
+
+            return values;
+        }
+
+        private static NpgsqlTypeMapping GetTypeMapping(Type type)
+            => NpgsqlConnection
+                .GlobalTypeMapper
+                .Mappings
+                .FirstOrDefault(mapping => mapping.ClrTypes.Contains(type));
+
+        private static NpgsqlTypeMapping GetTypeMapping(NpgsqlDbType type)
+            => NpgsqlConnection
+                .GlobalTypeMapper
+                .Mappings
+                .FirstOrDefault(mapping => mapping.NpgsqlDbType == type);
 
         public static string ConvertSynonyms(string type)
         {
@@ -56,6 +120,7 @@ namespace Marten.Util
                     return "boolean";
 
                 case "integer":
+                case "serial":
                     return "int";
 
                 case "integer[]":
@@ -70,6 +135,12 @@ namespace Marten.Util
 
                 case "timestamp with time zone":
                     return "timestamptz";
+
+                case "array":
+                case "character varying[]":
+                case "varchar[]":
+                case "text[]":
+                    return "array";
             }
 
             return type;
@@ -125,35 +196,81 @@ namespace Marten.Util
         /// </summary>
         public static NpgsqlDbType ToDbType(Type type)
         {
-            if (TypeToNpgsqlDbType.TryGetValue(type, out NpgsqlDbType? npgsqlDbType))
+            if (determineNpgsqlDbType(type, out var dbType))
+                return dbType;
+
+            throw new NotSupportedException("Can't infer NpgsqlDbType for type " + type);
+        }
+
+        public static NpgsqlDbType? TryGetDbType(Type type)
+        {
+            if (type == null || !determineNpgsqlDbType(type, out var dbType))
+                return null;
+
+            return dbType;
+        }
+
+        private static bool determineNpgsqlDbType(Type type, out NpgsqlDbType dbType)
+        {
+            var npgsqlDbType = ResolveNpgsqlDbType(type);
+            if (npgsqlDbType != null)
             {
-                return npgsqlDbType.Value;
+                {
+                    dbType = npgsqlDbType.Value;
+                    return true;
+                }
             }
 
-            if (type.IsNullable()) return ToDbType(type.GetInnerTypeFromNullable());
+            if (type.IsNullable())
+            {
+                dbType = ToDbType(type.GetInnerTypeFromNullable());
+                return true;
+            }
 
-            if (type.IsEnum) return NpgsqlDbType.Integer;
+            if (type.IsEnum)
+            {
+                dbType = NpgsqlDbType.Integer;
+                return true;
+            }
 
             if (type.IsArray)
             {
                 if (type == typeof(byte[]))
-                    return NpgsqlDbType.Bytea;
-                return NpgsqlDbType.Array | ToDbType(type.GetElementType());
+                {
+                    dbType = NpgsqlDbType.Bytea;
+                    return true;
+                }
+
+                {
+                    dbType = NpgsqlDbType.Array | ToDbType(type.GetElementType());
+                    return true;
+                }
             }
 
             var typeInfo = type.GetTypeInfo();
 
-            var ilist = typeInfo.ImplementedInterfaces.FirstOrDefault(x => x.GetTypeInfo().IsGenericType && x.GetGenericTypeDefinition() == typeof(IList<>));
+            var ilist = typeInfo.ImplementedInterfaces.FirstOrDefault(x =>
+                x.GetTypeInfo().IsGenericType && x.GetGenericTypeDefinition() == typeof(IList<>));
             if (ilist != null)
-                return NpgsqlDbType.Array | ToDbType(ilist.GetGenericArguments()[0]);
+            {
+                dbType = NpgsqlDbType.Array | ToDbType(ilist.GetGenericArguments()[0]);
+                return true;
+            }
 
             if (typeInfo.IsGenericType && type.GetGenericTypeDefinition() == typeof(NpgsqlRange<>))
-                return NpgsqlDbType.Range | ToDbType(type.GetGenericArguments()[0]);
+            {
+                dbType = NpgsqlDbType.Range | ToDbType(type.GetGenericArguments()[0]);
+                return true;
+            }
 
             if (type == typeof(DBNull))
-                return NpgsqlDbType.Unknown;
+            {
+                dbType = NpgsqlDbType.Unknown;
+                return true;
+            }
 
-            throw new NotSupportedException("Can't infer NpgsqlDbType for type " + type);
+            dbType = NpgsqlDbType.Unknown;
+            return false;
         }
 
         public static string GetPgType(Type memberType, EnumStorage enumStyle)
@@ -176,13 +293,10 @@ namespace Marten.Util
             if (memberType.IsConstructedGenericType)
             {
                 var templateType = memberType.GetGenericTypeDefinition();
-
-                if (PgTypes.ContainsKey(templateType)) return PgTypes[templateType];
-
-                return "jsonb";
+                return ResolvePgType(templateType) ?? "jsonb";
             }
 
-            return PgTypes.ContainsKey(memberType) ? PgTypes[memberType] : "jsonb";
+            return ResolvePgType(memberType) ?? "jsonb";
         }
 
         public static bool HasTypeMapping(Type memberType)
@@ -193,27 +307,76 @@ namespace Marten.Util
             }
 
             // more complicated later
-            return PgTypes.ContainsKey(memberType) || memberType.IsEnum;
+            return ResolvePgType(memberType) != null || memberType.IsEnum;
         }
 
-        public static string ApplyCastToLocator(this string locator, EnumStorage enumStyle, Type memberType)
+        private static Type GetNullableType(Type type)
         {
-            if (memberType.IsEnum)
-            {
-                return enumStyle == EnumStorage.AsInteger ? "({0})::int".ToFormat(locator) : locator;
-            }
-
-            // Treat "unknown" PgTypes as jsonb (this way null checks of arbitary depth won't fail on cast).
-            return "CAST({0} as {1})".ToFormat(locator, GetPgType(memberType, enumStyle));
+            type = Nullable.GetUnderlyingType(type) ?? type;
+            if (type.IsValueType)
+                return typeof(Nullable<>).MakeGenericType(type);
+            else
+                return type;
         }
 
-        public static bool IsDate(this object value)
+        public static void AddTimespanTypes(NpgsqlDbType npgsqlDbType, params Type[] types)
         {
-            if (value == null) return false;
+            var timespanTypesList = (npgsqlDbType == NpgsqlDbType.Timestamp) ? TimespanTypes : TimespanZTypes;
+            var typesWithNullables = types.Union(types.Select(t => GetNullableType(t))).Where(t => !timespanTypesList.Contains(t)).ToList();
 
-            var type = value.GetType();
+            timespanTypesList.AddRange(typesWithNullables);
 
-            return type == typeof(DateTime) || type == typeof(DateTime?);
+            ContainmentOperatorTypes.AddRange(typesWithNullables);
+        }
+
+        internal static DateTime MapToDateTime(this object value)
+        {
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+
+            if (CustomMappingToDateTime != null)
+                return CustomMappingToDateTime(value);
+
+            if (value is DateTimeOffset offset)
+                return offset.DateTime;
+
+            if (value is DateTime dateTime)
+                return dateTime;
+
+            throw new ArgumentException($"Cannot convert type {value.GetType()} to DateTime", nameof(value));
+        }
+
+        internal static DateTimeOffset MapToDateTimeOffset(this object value)
+        {
+            if (value == null)
+                throw new ArgumentNullException(nameof(value));
+
+            if (CustomMappingToDateTimeOffset != null)
+                return CustomMappingToDateTimeOffset(value);
+
+            if (value is DateTimeOffset offset)
+                return offset;
+
+            if (value is DateTime dateTime)
+                return dateTime;
+
+            throw new ArgumentException($"Cannot convert type {value.GetType()} to DateTimeOffset", nameof(value));
+        }
+
+        internal static object MapFromDateTime(this DateTime value)
+        {
+            if (CustomMappingFromDateTime != null)
+                return CustomMappingFromDateTime(value);
+
+            return value;
+        }
+
+        internal static object MapFromDateTimeOffset(this DateTimeOffset value)
+        {
+            if (CustomMappingFromDateTimeOffset != null)
+                return CustomMappingFromDateTimeOffset(value);
+
+            return value;
         }
     }
 }

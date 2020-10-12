@@ -1,13 +1,15 @@
-using System.Linq.Expressions;
+using LamarCodeGeneration;
+using LamarCodeGeneration.Frames;
+using LamarCodeGeneration.Model;
+using Marten.Internal.CodeGeneration;
 using Marten.Storage;
 using NpgsqlTypes;
 
 namespace Marten.Schema.Arguments
 {
-    public class TenantIdArgument : UpsertArgument
+    public class TenantIdArgument: UpsertArgument
     {
         public const string ArgName = "tenantid";
-
 
         public TenantIdArgument()
         {
@@ -17,22 +19,35 @@ namespace Marten.Schema.Arguments
             Column = TenantIdColumn.Name;
         }
 
-        public override Expression CompileBulkImporter(DocumentMapping mapping, EnumStorage enumStorage, Expression writer, ParameterExpression document, ParameterExpression alias, ParameterExpression serializer, ParameterExpression textWriter, ParameterExpression tenantId)
+        public override void GenerateCodeToModifyDocument(GeneratedMethod method, GeneratedType type, int i, Argument parameters,
+            DocumentMapping mapping, StoreOptions options)
         {
-            var method = writeMethod.MakeGenericMethod(typeof(string));
-            var dbType = Expression.Constant(DbType);
+            method.Frames.Code($"var tenantId = {{0}}.{nameof(ITenant.TenantId)};", Use.Type<ITenant>());
 
-            return Expression.Call(writer, method, tenantId, dbType);
+            if (mapping.Metadata.TenantId.Member != null)
+            {
+                method.Frames.SetMemberValue(mapping.Metadata.TenantId.Member, "tenantId", mapping.DocumentType, type);
+            }
         }
 
-        public override Expression CompileUpdateExpression(EnumStorage enumStorage, ParameterExpression call, ParameterExpression doc,
-            ParameterExpression updateBatch, ParameterExpression mapping, ParameterExpression currentVersion,
-            ParameterExpression newVersion, ParameterExpression tenantId, bool useCharBufferPooling)
-        {
-            var argName = Expression.Constant(Arg);
-            var dbType = Expression.Constant(NpgsqlDbType.Varchar);
 
-            return Expression.Call(call, _paramMethod, argName, tenantId, dbType);
+        public override void GenerateCodeToSetDbParameterValue(GeneratedMethod method, GeneratedType type, int i, Argument parameters,
+            DocumentMapping mapping, StoreOptions options)
+        {
+
+            method.Frames.Code($"{{0}}[{{1}}].Value = tenantId;", parameters, i);
+            method.Frames.Code("{0}[{1}].NpgsqlDbType = {2};", parameters, i, DbType);
+
+
+        }
+
+        public override void GenerateBulkWriterCode(GeneratedType type, GeneratedMethod load, DocumentMapping mapping)
+        {
+            load.Frames.Code($"writer.Write(tenant.TenantId, {{0}});", DbType);
+            if (mapping.Metadata.TenantId.Member != null)
+            {
+                load.Frames.SetMemberValue(mapping.Metadata.TenantId.Member, "tenant.TenantId", mapping.DocumentType, type);
+            }
         }
     }
 }

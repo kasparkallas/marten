@@ -1,12 +1,14 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Marten.Schema;
 using Marten.Storage;
+using Marten.Testing.Harness;
+using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_931_duplicate_field_att_not_working_for_array_or_list : IntegratedFixture
+    public class Bug_931_duplicate_field_att_not_working_for_array_or_list: IntegrationContext
     {
         [Fact]
         public void can_create_for_array()
@@ -23,6 +25,10 @@ namespace Marten.Testing.Bugs
             var table = new DocumentTable(mapping);
             table.HasColumn("list_tags").ShouldBeTrue();
         }
+
+        public Bug_931_duplicate_field_att_not_working_for_array_or_list(DefaultStoreFixture fixture) : base(fixture)
+        {
+        }
     }
 
     public class DupFieldAttTest
@@ -35,4 +41,4 @@ namespace Marten.Testing.Bugs
         [DuplicateField(PgType = "varchar[]")]
         public List<string> ListTags { get; set; }
     }
-}   
+}

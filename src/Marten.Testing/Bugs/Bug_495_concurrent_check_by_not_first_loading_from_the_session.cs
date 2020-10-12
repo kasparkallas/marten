@@ -1,12 +1,14 @@
-﻿using System;
+using System;
+using Marten.Exceptions;
 using Marten.Schema;
+using Marten.Services;
+using Marten.Testing.Harness;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_495_concurrent_check_by_not_first_loading_from_the_session : IntegratedFixture
+    public class Bug_495_concurrent_check_by_not_first_loading_from_the_session: BugIntegrationContext
     {
-
         [UseOptimisticConcurrency]
         public class Foo
         {
@@ -26,7 +28,7 @@ namespace Marten.Testing.Bugs
                 session.SaveChanges();
             }
 
-            Exception<AggregateException>.ShouldBeThrownBy(() =>
+            Exception<ConcurrencyException>.ShouldBeThrownBy(() =>
             {
                 using (var session = theStore.LightweightSession())
                 {

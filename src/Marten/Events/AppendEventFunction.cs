@@ -5,7 +5,7 @@ using Marten.Storage;
 namespace Marten.Events
 {
     // SAMPLE: AppendEventFunction
-    public class AppendEventFunction : Function
+    public class AppendEventFunction: Function
     {
         private readonly EventGraph _events;
 
@@ -40,7 +40,7 @@ DECLARE
     actual_tenant varchar;
 	return_value int[];
 BEGIN
-	select version into event_version from {databaseSchema}.mt_streams where {streamsWhere};
+	select version into event_version from {databaseSchema}.mt_streams where {streamsWhere}{(_events.UseAppendEventForUpdateLock ? " for update" : string.Empty)};
 	if event_version IS NULL then
 		event_version = 0;
 		insert into {databaseSchema}.mt_streams (id, type, version, timestamp, tenant_id) values (stream, stream_type, 0, now(), tenantid);
@@ -66,7 +66,7 @@ BEGIN
 		body = bodies[index];
 
 		insert into {databaseSchema}.mt_events
-			(seq_id, id, stream_id, version, data, type, tenant_id, {DocumentMapping.DotNetTypeColumn})
+			(seq_id, id, stream_id, version, data, type, tenant_id, {SchemaConstants.DotNetTypeColumn})
 		values
 			(seq, event_id, stream, event_version, body, event_type, tenantid, dotnet_types[index]);
 
@@ -84,7 +84,7 @@ $$ LANGUAGE plpgsql;
         protected override string toDropSql()
         {
             var streamIdType = _events.GetStreamIdDBType();
-            return $"drop function if exists {Identifier} ({streamIdType}, varchar, varchar, uuid[], varchar[], jsonb[])";
+            return $"drop function if exists {Identifier} ({streamIdType}, varchar, varchar, uuid[], varchar[], jsonb[]);";
         }
     }
 

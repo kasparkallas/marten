@@ -1,13 +1,14 @@
 using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
 using Baseline;
 using Marten.Events.Projections;
+using Marten.Exceptions;
 using Marten.Schema;
 using Marten.Storage;
+using Marten.Util;
 
 namespace Marten.Events
 {
@@ -17,13 +18,13 @@ namespace Marten.Events
         AsString
     }
 
-    public class EventGraph : IFeatureSchema
+    public class EventGraph: IFeatureSchema
     {
-        private readonly ConcurrentDictionary<string, IAggregator> _aggregateByName =
-            new ConcurrentDictionary<string, IAggregator>();
+        private readonly Ref<ImHashMap<string, IAggregator>> _aggregateByName =
+            Ref.Of(ImHashMap<string, IAggregator>.Empty);
 
-        private readonly ConcurrentDictionary<Type, IAggregator> _aggregates =
-            new ConcurrentDictionary<Type, IAggregator>();
+        private readonly Ref<ImHashMap<Type, IAggregator>> _aggregates =
+            Ref.Of(ImHashMap<Type, IAggregator>.Empty);
 
         private readonly ConcurrentCache<string, EventMapping> _byEventName = new ConcurrentCache<string, EventMapping>();
         private readonly ConcurrentCache<Type, EventMapping> _events = new ConcurrentCache<Type, EventMapping>();
@@ -53,6 +54,15 @@ namespace Marten.Events
 
         public TenancyStyle TenancyStyle { get; set; } = TenancyStyle.Single;
 
+        /// <summary>
+        ///     Whether a "for update" (row exclusive lock) should be used when selecting out the event version to use from the streams table
+        /// </summary>
+        /// <remkarks>
+        ///     Not using this can result in race conditions in a concurrent environment that lead to
+        ///       event version mismatches between the event and stream version numbers
+        /// </remkarks>
+        public bool UseAppendEventForUpdateLock { get; set; } = false;
+
         internal StoreOptions Options { get; }
 
         internal DbObjectName Table => new DbObjectName(DatabaseSchemaName, "mt_events");
@@ -62,7 +72,7 @@ namespace Marten.Events
             return _events[eventType];
         }
 
-        public EventMapping EventMappingFor<T>() where T : class, new()
+        public EventMapping EventMappingFor<T>() where T : class
         {
             return EventMappingFor(typeof(T));
         }
@@ -74,7 +84,7 @@ namespace Marten.Events
 
         public IEnumerable<IAggregator> AllAggregates()
         {
-            return _aggregates.Values;
+            return _aggregates.Value.Enumerate().Select(x => x.Value);
         }
 
         public EventMapping EventMappingFor(string eventType)
@@ -92,7 +102,7 @@ namespace Marten.Events
             types.Each(AddEventType);
         }
 
-        public bool IsActive(StoreOptions options) => _events.Any() || _aggregates.Any();
+        public bool IsActive(StoreOptions options) => _events.Any() || _aggregates.Value.Enumerate().Any();
 
         public string DatabaseSchemaName
         {
@@ -100,39 +110,39 @@ namespace Marten.Events
             set { _databaseSchemaName = value; }
         }
 
-        public void AddAggregator<T>(IAggregator<T> aggregator) where T : class, new()
+        public void AddAggregator<T>(IAggregator<T> aggregator) where T : class
         {
             Options.Storage.MappingFor(typeof(T));
-            _aggregates.AddOrUpdate(typeof(T), aggregator, (type, previous) => aggregator);
+            _aggregates.Swap(a => a.AddOrUpdate(typeof(T), aggregator));
         }
 
-        public IAggregator<T> AggregateFor<T>() where T : class, new()
+        public IAggregator<T> AggregateFor<T>() where T : class
         {
-            return _aggregates
-                .GetOrAdd(typeof(T), type =>
-                {
-                    Options.Storage.MappingFor(typeof(T));
-                    return _aggregatorLookup.Lookup<T>();
-                })
-                .As<IAggregator<T>>();
+            if (!_aggregates.Value.TryFind(typeof(T), out var aggregator))
+            {
+                Options.Storage.MappingFor(typeof(T));
+                aggregator = _aggregatorLookup.Lookup<T>();
+                _aggregates.Swap(a => a.AddOrUpdate(typeof(T), aggregator));
+            }
+            return aggregator.As<IAggregator<T>>();
         }
 
         public Type AggregateTypeFor(string aggregateTypeName)
         {
-            if (_aggregateByName.ContainsKey(aggregateTypeName))
+            if (_aggregateByName.Value.TryFind(aggregateTypeName, out var aggregate))
             {
-                return _aggregateByName[aggregateTypeName].AggregateType;
+                return aggregate.AggregateType;
             }
 
-            var aggregate = AllAggregates().FirstOrDefault(x => x.Alias == aggregateTypeName);
+            aggregate = AllAggregates().FirstOrDefault(x => x.Alias == aggregateTypeName);
             if (aggregate == null)
             {
                 return null;
             }
 
-            return
-                _aggregateByName.GetOrAdd(aggregateTypeName,
-                    name => { return AllAggregates().FirstOrDefault(x => x.Alias == name); }).AggregateType;
+            _aggregateByName.Swap(a => a.AddOrUpdate(aggregateTypeName, aggregate));
+
+            return aggregate.AggregateType;
         }
 
         public ProjectionCollection InlineProjections { get; }
@@ -141,8 +151,13 @@ namespace Marten.Events
 
         public string AggregateAliasFor(Type aggregateType)
         {
-            return _aggregates
-                .GetOrAdd(aggregateType, type => _aggregatorLookup.Lookup(type)).Alias;
+            if (!_aggregates.Value.TryFind(aggregateType, out var aggregator))
+            {
+                aggregator = _aggregatorLookup.Lookup(aggregateType);
+                _aggregates.Swap(a => a.AddOrUpdate(aggregateType, aggregator));
+            }
+
+            return aggregator.Alias;
         }
 
         public IProjection ProjectionFor(Type viewType)
@@ -150,7 +165,7 @@ namespace Marten.Events
             return AsyncProjections.ForView(viewType) ?? InlineProjections.ForView(viewType);
         }
 
-        public ViewProjection<TView, TId> ProjectView<TView, TId>() where TView : class, new()
+        public ViewProjection<TView, TId> ProjectView<TView, TId>() where TView : class
         {
             var projection = new ViewProjection<TView, TId>();
             InlineProjections.Add(projection);
@@ -216,33 +231,35 @@ namespace Marten.Events
             return StreamIdentity == StreamIdentity.AsGuid ? typeof(Guid) : typeof(string);
         }
 
-        private readonly ConcurrentDictionary<Type, string> _dotnetTypeNames = new ConcurrentDictionary<Type, string>();
+        private readonly Ref<ImHashMap<Type, string>> _dotnetTypeNames = Ref.Of(ImHashMap<Type, string>.Empty);
 
         internal string DotnetTypeNameFor(Type type)
         {
-            if (!_dotnetTypeNames.ContainsKey(type))
+            if (!_dotnetTypeNames.Value.TryFind(type, out var value))
             {
-                _dotnetTypeNames[type] = $"{type.FullName}, {type.GetTypeInfo().Assembly.GetName().Name}";
+                value = $"{type.FullName}, {type.GetTypeInfo().Assembly.GetName().Name}";
+
+                _dotnetTypeNames.Swap(d => d.AddOrUpdate(type, value));
             }
 
-            return _dotnetTypeNames[type];
+            return value;
         }
 
-        private readonly ConcurrentDictionary<string, Type> _nameToType = new ConcurrentDictionary<string, Type>();
+        private readonly Ref<ImHashMap<string, Type>> _nameToType = Ref.Of(ImHashMap<string, Type>.Empty);
 
         internal Type TypeForDotNetName(string assemblyQualifiedName)
         {
-            if (!_nameToType.ContainsKey(assemblyQualifiedName))
+            if (!_nameToType.Value.TryFind(assemblyQualifiedName, out var value))
             {
-                var runtimeType = Type.GetType(assemblyQualifiedName);
-                if(runtimeType == null)
+                value = Type.GetType(assemblyQualifiedName);
+                if (value == null)
                 {
                     throw new UnknownEventTypeException($"Unable to load event type '{assemblyQualifiedName}'.");
                 }
-                _nameToType[assemblyQualifiedName] = runtimeType;
+                _nameToType.Swap(n => n.AddOrUpdate(assemblyQualifiedName, value));
             }
 
-            return _nameToType[assemblyQualifiedName];
+            return value;
         }
     }
 }

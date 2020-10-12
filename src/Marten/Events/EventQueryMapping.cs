@@ -1,7 +1,9 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Linq.Expressions;
 using Marten.Linq;
+using Marten.Linq.Fields;
+using Marten.Linq.Parsing;
 using Marten.Schema;
 
 namespace Marten.Events
@@ -10,15 +12,13 @@ namespace Marten.Events
     {
         public EventQueryMapping(StoreOptions storeOptions) : base(typeof(IEvent), storeOptions)
         {
-
-
-            Selector = storeOptions.Events.StreamIdentity == StreamIdentity.AsGuid 
-                ? (ISelector<IEvent>) new EventSelector(storeOptions.Events, storeOptions.Serializer())
+            Selector = storeOptions.Events.StreamIdentity == StreamIdentity.AsGuid
+                ? (IEventSelector)new EventSelector(storeOptions.Events, storeOptions.Serializer())
                 : new StringIdentifiedEventSelector(storeOptions.Events, storeOptions.Serializer());
 
             DatabaseSchemaName = storeOptions.Events.DatabaseSchemaName;
 
-            Table = new DbObjectName(DatabaseSchemaName, "mt_events");
+            TableName = new DbObjectName(DatabaseSchemaName, "mt_events");
 
             duplicateField(x => x.Sequence, "seq_id");
             if (storeOptions.Events.StreamIdentity == StreamIdentity.AsGuid)
@@ -34,9 +34,9 @@ namespace Marten.Events
             duplicateField(x => x.Timestamp, "timestamp");
         }
 
-        public ISelector<IEvent> Selector { get; }
+        internal IEventSelector Selector { get; }
 
-        public override DbObjectName Table { get; }
+        public override DbObjectName TableName { get; }
 
         private DuplicatedField duplicateField(Expression<Func<IEvent, object>> property, string columnName)
         {
@@ -46,9 +46,5 @@ namespace Marten.Events
             return DuplicateField(finder.Members.ToArray(), columnName: columnName);
         }
 
-        public override string[] SelectFields()
-        {
-            return Selector.SelectFields();
-        }
     }
 }

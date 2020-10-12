@@ -1,12 +1,13 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
-using Marten.Storage;
 using Baseline;
+using Marten.Schema.Indexing.Unique;
+using Marten.Storage;
 
 namespace Marten.Schema
 {
-    public class IndexDefinition : IIndexDefinition
+    public class IndexDefinition: IIndexDefinition
     {
         private readonly DocumentMapping _parent;
         private readonly string[] _columns;
@@ -20,9 +21,13 @@ namespace Marten.Schema
 
         public IndexMethod Method { get; set; } = IndexMethod.btree;
 
+        public SortOrder SortOrder { get; set; } = SortOrder.Asc;
+
         public bool IsUnique { get; set; }
 
         public bool IsConcurrent { get; set; }
+
+        public TenancyScope TenancyScope { get; set; } = TenancyScope.Global;
 
         public string IndexName
         {
@@ -30,11 +35,11 @@ namespace Marten.Schema
             {
                 if (_indexName.IsNotEmpty())
                 {
-                    return _indexName.StartsWith(DocumentMapping.MartenPrefix)
+                    return _indexName.StartsWith(SchemaConstants.MartenPrefix)
                         ? _indexName.ToLowerInvariant()
-                        : DocumentMapping.MartenPrefix + _indexName.ToLowerInvariant();
+                        : SchemaConstants.MartenPrefix + _indexName.ToLowerInvariant();
                 }
-                return $"{_parent.Table.Name}_idx_{_columns.Join("_")}";
+                return $"{_parent.TableName.Name}_idx_{_columns.Join("_")}";
             }
             set { _indexName = value; }
         }
@@ -53,7 +58,7 @@ namespace Marten.Schema
                 index += " CONCURRENTLY";
             }
 
-            index += $" {IndexName} ON {_parent.Table.QualifiedName}";
+            index += $" {IndexName} ON {_parent.TableName.QualifiedName}";
 
             if (Method != IndexMethod.btree)
             {
@@ -61,6 +66,18 @@ namespace Marten.Schema
             }
 
             var columns = _columns.Select(column => $"\"{column}\"").Join(", ");
+
+            if (TenancyScope == TenancyScope.PerTenant)
+            {
+                columns += ", tenant_id";
+            }
+
+            // Only the B-tree index type supports modifying the sort order, and ascending is the default
+            if (Method == IndexMethod.btree && SortOrder == SortOrder.Desc)
+            {
+                columns += " DESC";
+            }
+
             if (Expression.IsEmpty())
             {
                 index += $" ({columns})";
@@ -80,7 +97,8 @@ namespace Marten.Schema
 
         public bool Matches(ActualIndex index)
         {
-            if (!index.Name.EqualsIgnoreCase(IndexName)) return false;
+            if (!index.Name.EqualsIgnoreCase(IndexName))
+                return false;
 
             var actual = index.DDL;
             if (Method == IndexMethod.btree)
@@ -115,9 +133,9 @@ namespace Marten.Schema
                 actual = Regex.Replace(actual, columnsMatchPattern, replacement);
             }
 
-            if (!actual.Contains(_parent.Table.QualifiedName))
+            if (!actual.Contains(_parent.TableName.QualifiedName))
             {
-                actual = actual.Replace("ON " + _parent.Table.Name, "ON " + _parent.Table.QualifiedName);
+                actual = actual.Replace("ON " + _parent.TableName.Name, "ON " + _parent.TableName.QualifiedName);
             }
 
             actual = actual.Replace("  ", " ") + ";";

@@ -1,21 +1,21 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Baseline;
 using Marten.Services;
+using Marten.Testing.Harness;
 using Npgsql;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events
 {
-    public class capturing_event_versions_on_existing_streams_after_append : IntegratedFixture
+    public class capturing_event_versions_on_existing_streams_after_append: IntegrationContext
     {
-        public class RecordingSessionLogger : IMartenSessionLogger
+        public class RecordingSessionLogger: IMartenSessionLogger
         {
             public void LogSuccess(NpgsqlCommand command)
             {
-                
             }
 
             public void LogFailure(NpgsqlCommand command, Exception ex)
@@ -51,7 +51,7 @@ namespace Marten.Testing.Events
                 events.Select(x => x.Version)
                     .ShouldHaveTheSameElementsAs(1, 2);
 
-                events.Each(x => x.Sequence.ShouldBeGreaterThan(0L));
+                events.Each(x => SpecificationExtensions.ShouldBeGreaterThan(x.Sequence, 0L));
 
                 events.Select(x => x.Sequence).Distinct().Count().ShouldBe(2);
             }
@@ -133,10 +133,14 @@ namespace Marten.Testing.Events
                 events.Select(x => x.Version)
                     .ShouldHaveTheSameElementsAs(5, 6);
 
-                events.Each(x => x.Sequence.ShouldBeGreaterThan(0L));
+                events.Each(x => SpecificationExtensions.ShouldBeGreaterThan(x.Sequence, 0L));
 
                 events.Select(x => x.Sequence).Distinct().Count().ShouldBe(2);
             }
+        }
+
+        public capturing_event_versions_on_existing_streams_after_append(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

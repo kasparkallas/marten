@@ -1,28 +1,15 @@
-﻿using System;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using Baseline;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Xunit;
 
 namespace Marten.Testing.Bugs
 {
-    public class Bug_571_defensive_check_for_IEnumerable_of_T_in_Store : IntegratedFixture
+    public class Bug_571_defensive_check_for_IEnumerable_of_T_in_Store: IntegrationContext
     {
-        [Fact]
-        public void does_not_allow_IEnumerable_of_T()
-        {
-            var users = new User[0].As<IEnumerable<User>>();
-
-            using (var session = theStore.OpenSession())
-            {
-                Exception<ArgumentOutOfRangeException>.ShouldBeThrownBy(() =>
-                {
-                    session.Store(users);
-                });
-            }
-        }
-
         [Fact]
         public void not_too_tight_in_the_validation()
         {
@@ -32,7 +19,7 @@ namespace Marten.Testing.Bugs
             }
         }
 
-        public class DocHolder : IEnumerable<User>
+        public class DocHolder: IEnumerable<User>
         {
             public Guid Id;
 
@@ -47,6 +34,10 @@ namespace Marten.Testing.Bugs
             {
                 return _users.GetEnumerator();
             }
+        }
+
+        public Bug_571_defensive_check_for_IEnumerable_of_T_in_Store(DefaultStoreFixture fixture) : base(fixture)
+        {
         }
     }
 }

@@ -1,18 +1,32 @@
-﻿using System;
+using System;
+using System.Buffers;
 using System.IO;
 using Baseline;
+using Marten.Services.Json;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using Newtonsoft.Json.Serialization;
 
 namespace Marten.Services
 {
-    public class JsonNetSerializer : ISerializer
+    public class JsonNetSerializer: ISerializer
     {
+        private readonly ArrayPool<char> _charPool = ArrayPool<char>.Create();
+        private readonly JsonArrayPool<char> _jsonArrayPool;
+
+
+
         private readonly JsonSerializer _clean = new JsonSerializer
         {
-            TypeNameHandling =  TypeNameHandling.None,
-            DateFormatHandling = DateFormatHandling.IsoDateFormat
+            TypeNameHandling = TypeNameHandling.None,
+            DateFormatHandling = DateFormatHandling.IsoDateFormat,
+            ContractResolver = new JsonNetContractResolver()
+        };
+
+        private readonly JsonSerializer _withTypes = new JsonSerializer
+        {
+            TypeNameHandling = TypeNameHandling.Objects,
+            DateFormatHandling = DateFormatHandling.IsoDateFormat,
+            ContractResolver = new JsonNetContractResolver()
         };
 
         // SAMPLE: newtonsoft-configuration
@@ -22,48 +36,85 @@ namespace Marten.Services
 
             // ISO 8601 formatting of DateTime's is mandatory
             DateFormatHandling = DateFormatHandling.IsoDateFormat,
-            MetadataPropertyHandling = MetadataPropertyHandling.ReadAhead
+            MetadataPropertyHandling = MetadataPropertyHandling.ReadAhead,
+            ContractResolver = new JsonNetContractResolver()
         };
+
         // ENDSAMPLE
 
+        public JsonNetSerializer()
+        {
+            _jsonArrayPool = new JsonArrayPool<char>(_charPool);
+        }
+
         /// <summary>
-        /// Customize the inner Newtonsoft formatter. 
+        /// Customize the inner Newtonsoft formatter.
         /// </summary>
         /// <param name="configure"></param>
         public void Customize(Action<JsonSerializer> configure)
         {
             configure(_clean);
             configure(_serializer);
+            configure(_withTypes);
 
             _clean.TypeNameHandling = TypeNameHandling.None;
+            _withTypes.TypeNameHandling = TypeNameHandling.Objects;
         }
 
         public void ToJson(object document, TextWriter writer)
         {
-            _serializer.Serialize(writer, document);
+            using var jsonWriter = new JsonTextWriter(writer)
+            {
+                ArrayPool = _jsonArrayPool,
+                CloseOutput = false,
+                AutoCompleteOnClose = false
+            };
+
+
+            _serializer.Serialize(jsonWriter, document);
+
+            writer.Flush();
         }
 
         public string ToJson(object document)
         {
             var writer = new StringWriter();
-            _serializer.Serialize(writer, document);
+            ToJson(document, writer);
 
             return writer.ToString();
         }
 
         public T FromJson<T>(Stream stream)
         {
-            return _serializer.Deserialize<T>(new JsonTextReader(new StreamReader(stream)));
+            using var jsonReader = new JsonTextReader(new StreamReader(stream))
+            {
+                ArrayPool = _jsonArrayPool,
+                CloseInput = false
+            };
+
+            return _serializer.Deserialize<T>(jsonReader);
         }
 
         public T FromJson<T>(TextReader reader)
         {
-            return _serializer.Deserialize<T>(new JsonTextReader(reader));
+            using var jsonReader = new JsonTextReader(reader)
+            {
+                ArrayPool = _jsonArrayPool,
+                CloseInput = false
+            };
+
+            return _serializer.Deserialize<T>(jsonReader);
         }
 
         public object FromJson(Type type, TextReader reader)
         {
-            return _serializer.Deserialize(new JsonTextReader(reader), type);
+            using var jsonReader = new JsonTextReader(reader)
+            {
+                ArrayPool = _jsonArrayPool,
+                CloseInput = false
+            };
+
+            return _serializer.Deserialize(jsonReader, type);
         }
 
         public string ToCleanJson(object document)
@@ -75,9 +126,20 @@ namespace Marten.Services
             return writer.ToString();
         }
 
+        public string ToJsonWithTypes(object document)
+        {
+            var writer = new StringWriter();
+
+            _withTypes.Serialize(writer, document);
+
+            return writer.ToString();
+        }
+
         private EnumStorage _enumStorage = EnumStorage.AsInteger;
         private Casing _casing = Casing.Default;
-        
+        private CollectionStorage _collectionStorage = CollectionStorage.Default;
+        private NonPublicMembersStorage _nonPublicMembersStorage;
+
         /// <summary>
         /// Specify whether .Net Enum values should be stored as integers or strings
         /// within the Json document. Default is AsInteger.
@@ -119,21 +181,48 @@ namespace Marten.Services
             {
                 _casing = value;
 
-                if (value == Casing.Default)
+                _serializer.ContractResolver = new JsonNetContractResolver(_casing, CollectionStorage, NonPublicMembersStorage);
+                _clean.ContractResolver = new JsonNetContractResolver(_casing, CollectionStorage, NonPublicMembersStorage);
+            }
+        }
+
+        /// <summary>
+        /// Specify whether collections should be stored as json arrays (without type names)
+        /// </summary>
+        public CollectionStorage CollectionStorage
+        {
+            get
+            {
+                return _collectionStorage;
+            }
+            set
+            {
+                _collectionStorage = value;
+
+                _serializer.ContractResolver = new JsonNetContractResolver(Casing, _collectionStorage, NonPublicMembersStorage);
+                _clean.ContractResolver = new JsonNetContractResolver(Casing, _collectionStorage, NonPublicMembersStorage);
+            }
+        }
+
+        /// <summary>
+        /// Specify whether non public members should be used during deserialization
+        /// </summary>
+        public NonPublicMembersStorage NonPublicMembersStorage
+        {
+            get
+            {
+                return _nonPublicMembersStorage;
+            }
+            set
+            {
+                _nonPublicMembersStorage = value;
+
+                if (_nonPublicMembersStorage.HasFlag(NonPublicMembersStorage.NonPublicDefaultConstructor))
                 {
-                    _serializer.ContractResolver = new DefaultContractResolver();
-                    _clean.ContractResolver = new DefaultContractResolver();
+                    _serializer.ConstructorHandling = ConstructorHandling.AllowNonPublicDefaultConstructor;
                 }
-                else if (value == Casing.CamelCase)
-                {
-                    _serializer.ContractResolver = new DefaultContractResolver { NamingStrategy = new CamelCaseNamingStrategy() };
-                    _clean.ContractResolver = new DefaultContractResolver { NamingStrategy = new CamelCaseNamingStrategy { ProcessDictionaryKeys = true, OverrideSpecifiedNames = true } };
-                }
-                else
-                {
-                    _serializer.ContractResolver = new DefaultContractResolver { NamingStrategy = new SnakeCaseNamingStrategy() };
-                    _clean.ContractResolver = new DefaultContractResolver { NamingStrategy = new SnakeCaseNamingStrategy { ProcessDictionaryKeys = true, OverrideSpecifiedNames = true } };
-                }
+                _serializer.ContractResolver = new JsonNetContractResolver(Casing, CollectionStorage, _nonPublicMembersStorage);
+                _clean.ContractResolver = new JsonNetContractResolver(Casing, CollectionStorage, _nonPublicMembersStorage);
             }
         }
     }

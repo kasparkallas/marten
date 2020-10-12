@@ -1,39 +1,40 @@
 using System;
-using System.Collections.Concurrent;
 using System.Linq;
 using System.Linq.Expressions;
+using Marten.Exceptions;
 using Marten.Schema;
 using Marten.Testing.Documents;
-using Npgsql;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Acceptance
 {
-    public class computed_indexes : IntegratedFixture
+    [Collection("acceptance")]
+    public class computed_indexes: OneOffConfigurationsContext
     {
         [Fact]
         public void example()
         {
             // SAMPLE: using-a-simple-calculated-index
-    var store = DocumentStore.For(_ =>
-    {
-        _.Connection(ConnectionSource.ConnectionString);
+            var store = DocumentStore.For(_ =>
+            {
+                _.Connection(ConnectionSource.ConnectionString);
 
-        // This creates 
-        _.Schema.For<User>().Index(x => x.UserName);
-    });
+                _.DatabaseSchemaName = "examples";
 
-            
+                // This creates
+                _.Schema.For<User>().Index(x => x.UserName);
+            });
 
-    using (var session = store.QuerySession())
-    {
-        // Postgresql will be able to use the computed
-        // index generated from above
-        var somebody = session.Query<User>()
-            .Where(x => x.UserName == "somebody")
-            .FirstOrDefault();
-    }
+            using (var session = store.QuerySession())
+            {
+                // Postgresql will be able to use the computed
+                // index generated from above
+                var somebody = session.Query<User>()
+                    .Where(x => x.UserName == "somebody")
+                    .FirstOrDefault();
+            }
             // ENDSAMPLE
 
             store.Dispose();
@@ -44,7 +45,7 @@ namespace Marten.Testing.Acceptance
         {
             StoreOptions(_ => _.Schema.For<Target>().Index(x => x.Number));
 
-                        var data = Target.GenerateRandomData(100).ToArray();
+            var data = Target.GenerateRandomData(100).ToArray();
             theStore.BulkInsert(data.ToArray());
 
             theStore.Tenancy.Default.DbObjects.AllIndexes().Select(x => x.Name)
@@ -64,52 +65,64 @@ namespace Marten.Testing.Acceptance
         public void specify_a_deep_index()
         {
             // SAMPLE: deep-calculated-index
-    var store = DocumentStore.For(_ =>
-    {
-        _.Connection(ConnectionSource.ConnectionString);
+            var store = DocumentStore.For(_ =>
+            {
+                _.Connection(ConnectionSource.ConnectionString);
 
-        _.Schema.For<Target>().Index(x => x.Inner.Color);
-    });
+                _.Schema.For<Target>().Index(x => x.Inner.Color);
+            });
             // ENDSAMPLE
-
         }
 
         [Fact]
         public void specify_a_different_mechanism_to_customize_the_index()
         {
             // SAMPLE: customizing-calculated-index
-    var store = DocumentStore.For(_ =>
-    {
-        _.Connection(ConnectionSource.ConnectionString);
+            var store = DocumentStore.For(_ =>
+            {
+                _.Connection(ConnectionSource.ConnectionString);
 
-        // The second, optional argument to Index()
-        // allows you to customize the calculated index
-        _.Schema.For<Target>().Index(x => x.Number, x =>
-        {
-            // Change the index method to "brin"
-            x.Method = IndexMethod.brin;
+                // The second, optional argument to Index()
+                // allows you to customize the calculated index
+                _.Schema.For<Target>().Index(x => x.Number, x =>
+                        {
+                            // Change the index method to "brin"
+                            x.Method = IndexMethod.brin;
 
-            // Force the index to be generated with casing rules
-            x.Casing = ComputedIndex.Casings.Lower;
+                            // Force the index to be generated with casing rules
+                            x.Casing = ComputedIndex.Casings.Lower;
 
-            // Override the index name if you want
-            x.IndexName = "mt_my_name";
+                            // Override the index name if you want
+                            x.IndexName = "mt_my_name";
 
-            // Toggle whether or not the index is concurrent
-            // Default is false
-            x.IsConcurrent = true;
+                            // Toggle whether or not the index is concurrent
+                            // Default is false
+                            x.IsConcurrent = true;
 
-            // Toggle whether or not the index is a UNIQUE
-            // index
-            x.IsUnique = true;
+                            // Toggle whether or not the index is a UNIQUE
+                            // index
+                            x.IsUnique = true;
 
-            // Partial index by supplying a condition
-            x.Where = "(data ->> 'Number')::int > 10";
-        });
-    });
+                            // Toggle whether index value will be constrained unique in scope of whole document table (Global)
+                            // or in a scope of a single tenant (PerTenant)
+                            // Default is Global
+                            x.TenancyScope = Schema.Indexing.Unique.TenancyScope.PerTenant;
+
+                            // Partial index by supplying a condition
+                            x.Where = "(data ->> 'Number')::int > 10";
+                        });
+
+                // For B-tree indexes, it's also possible to change
+                // the sort order from the default of "ascending"
+                _.Schema.For<User>().Index(x => x.LastName, x =>
+                        {
+                            // Change the index method to "brin"
+                            x.SortOrder = SortOrder.Desc;
+                        });
+            });
             // ENDSAMPLE
         }
-        
+
         [Fact]
         public void specifying_an_index_type_should_create_the_index_with_that_type()
         {
@@ -125,11 +138,30 @@ namespace Marten.Testing.Acceptance
                 .Where(x => x.Name == "mt_doc_target_idx_number")
                 .Select(x => x.DDL.ToLower())
                 .First();
-            
-            ddl.ShouldContain("mt_doc_target_idx_number on");
-            ddl.ShouldContain("mt_doc_target using brin");
 
+            SpecificationExtensions.ShouldContain(ddl, "mt_doc_target_idx_number on");
+            SpecificationExtensions.ShouldContain(ddl, "mt_doc_target using brin");
+        }
 
+        [Fact]
+        public void create_index_with_sort_order()
+        {
+            StoreOptions(_ => _.Schema.For<Target>().Index(x => x.Number, x =>
+            {
+                x.SortOrder = SortOrder.Desc;
+            }));
+
+            var data = Target.GenerateRandomData(100).ToArray();
+            theStore.BulkInsert(data.ToArray());
+
+            var ddl = theStore.Tenancy.Default.DbObjects.AllIndexes()
+                .Where(x => x.Name == "mt_doc_target_idx_number")
+                .Select(x => x.DDL.ToLower())
+                .First();
+
+            SpecificationExtensions.ShouldContain(ddl, "mt_doc_target_idx_number on");
+            SpecificationExtensions.ShouldContain(ddl, "mt_doc_target");
+            ddl.ShouldEndWith(" DESC)", Case.Insensitive);
         }
 
         [Fact]
@@ -153,10 +185,88 @@ namespace Marten.Testing.Acceptance
                 .DDL
                 .ToLower();
 
+            SpecificationExtensions.ShouldContain(ddl, "index mt_doc_target_idx_user_idflag");
 
-            ddl.ShouldContain("index mt_doc_target_idx_user_idflag");
+            SpecificationExtensions.ShouldContain(ddl, "((((data ->> 'userid'::text))::uuid), (((data ->> 'flag'::text))::boolean))");
+        }
 
-            ddl.ShouldContain("((((data ->> 'userid'::text))::uuid), (((data ->> 'flag'::text))::boolean))");
+        [Fact]
+        public void create_multi_property_string_index_with_casing()
+        {
+            StoreOptions(_ =>
+            {
+                var columns = new Expression<Func<Target, object>>[]
+                {
+                    x => x.String,
+                    x => x.StringField
+                };
+                _.Schema.For<Target>().Index(columns, c => c.Casing = ComputedIndex.Casings.Upper);
+            });
+
+            var data = Target.GenerateRandomData(100).ToArray();
+            theStore.BulkInsert(data.ToArray());
+
+            var ddl = theStore.Tenancy.Default.DbObjects.AllIndexes()
+                .Single(x => x.Name == "mt_doc_target_idx_stringstring_field")
+                .DDL
+                .ToLower();
+
+            SpecificationExtensions.ShouldContain(ddl, "index mt_doc_target_idx_stringstring_field");
+
+            SpecificationExtensions.ShouldContain(ddl, "(upper((data ->> 'string'::text)), upper((data ->> 'stringfield'::text)))");
+        }
+
+        [Fact]
+        public void create_multi_property_type_index_with_casing()
+        {
+            StoreOptions(_ =>
+            {
+                var columns = new Expression<Func<Target, object>>[]
+                {
+                    x => x.String,
+                    x => x.Long,
+                    x => x.OtherGuid
+                };
+                _.Schema.For<Target>().Index(columns, c =>
+                {
+                    c.Casing = ComputedIndex.Casings.Upper;
+                    c.IsUnique = true;
+                });
+            });
+
+            var guid = Guid.NewGuid();
+            using (var session = theStore.LightweightSession())
+            {
+                var item = new Target
+                {
+                    String = "string value",
+                    Long = 123,
+                    OtherGuid = guid
+                };
+                session.Store(item);
+                session.SaveChanges();
+            }
+
+            var ddl = theStore.Tenancy.Default.DbObjects.AllIndexes()
+                .Single(x => x.Name == "mt_doc_target_uidx_stringlongother_guid")
+                .DDL
+                .ToLower();
+
+            SpecificationExtensions.ShouldContain(ddl, "index mt_doc_target_uidx_stringlongother_guid");
+            SpecificationExtensions.ShouldContain(ddl, "(upper((data ->> 'string'::text)), (((data ->> 'long'::text))::bigint), (((data ->> 'otherguid'::text))::uuid))");
+
+            using (var session = theStore.LightweightSession())
+            {
+                var item = new Target
+                {
+                    String = "String Value",
+                    Long = 123,
+                    OtherGuid = guid
+                };
+                session.Store(item);
+                var exception = Assert.Throws<DocumentAlreadyExistsException>(() => session.SaveChanges());
+                Assert.Contains("duplicate key value violates unique constraint", exception.ToString());
+            }
         }
 
         [Fact]
@@ -175,8 +285,8 @@ namespace Marten.Testing.Acceptance
                 .Select(x => x.DDL.ToLower())
                 .First();
 
-                ddl.ShouldContain("mt_doc_target_idx_date on");
-                ddl.ShouldContain("mt_doc_target_idx_date");
+            SpecificationExtensions.ShouldContain(ddl, "mt_doc_target_idx_date on");
+            SpecificationExtensions.ShouldContain(ddl, "mt_doc_target_idx_date");
         }
 
         [Fact]
@@ -199,7 +309,7 @@ namespace Marten.Testing.Acceptance
 
             theStore.Tenancy.Default.DbObjects.AllIndexes().Select(x => x.Name)
                     .ShouldContain("mt_doc_target_uidx_string");
-            
+
             using (var session = theStore.LightweightSession())
             {
                 var item = Target.GenerateRandomData(1).First();
@@ -216,7 +326,9 @@ namespace Marten.Testing.Acceptance
 
                 // Inserting the same original string should throw
                 session.Store(item2);
-                Assert.Throws<MartenCommandException>(() => session.SaveChanges()).Message.ShouldContain("duplicate");
+
+                Exception<DocumentAlreadyExistsException>.ShouldBeThrownBy(() => session.SaveChanges());
+
             }
         }
 
@@ -237,7 +349,7 @@ namespace Marten.Testing.Acceptance
                 session.Store(item);
                 session.SaveChanges();
             }
-            
+
             theStore.Tenancy.Default.DbObjects.AllIndexes().Select(x => x.Name)
                     .ShouldContain("mt_banana_index_created_by_nigel");
         }
@@ -259,11 +371,10 @@ namespace Marten.Testing.Acceptance
                 session.Store(item);
                 session.SaveChanges();
             }
-            
-            theStore.Tenancy.Default.DbObjects.AllIndexes()
-                    .Where(x => x.Name == "mt_doc_target_idx_string")
-                    .Select(x => x.DDL)
-                    .ShouldContain(x => x.Contains("WHERE (((data ->> 'Number'::text))::integer > 10)"));
+
+            SpecificationExtensions.ShouldContain(theStore.Tenancy.Default.DbObjects.AllIndexes()
+                        .Where(x => x.Name == "mt_doc_target_idx_string")
+                        .Select(x => x.DDL), x => x.Contains("WHERE (((data ->> 'Number'::text))::integer > 10)"));
         }
 
         [Fact]
@@ -297,14 +408,14 @@ namespace Marten.Testing.Acceptance
                 // Inserting the same string but all uppercase should throw because
                 // the index is stored with lowcased value
                 session.Store(item);
-                Assert.Throws<MartenCommandException>(() => session.SaveChanges()).Message.ShouldContain("duplicate");
+                Exception<DocumentAlreadyExistsException>.ShouldBeThrownBy(() => session.SaveChanges());
             }
         }
 
         [Fact]
         public void patch_if_missing()
         {
-            using (var store1 = TestingDocumentStore.Basic())
+            using (var store1 = SeparateStore())
             {
                 store1.Advanced.Clean.CompletelyRemoveAll();
 
@@ -319,14 +430,14 @@ namespace Marten.Testing.Acceptance
             {
                 var patch = store2.Schema.ToPatch();
 
-                patch.UpdateDDL.ShouldContain("mt_doc_target_idx_number");
+                SpecificationExtensions.ShouldContain(patch.UpdateDDL, "mt_doc_target_idx_number");
             }
         }
 
         [Fact]
         public void no_patch_if_not_missing()
         {
-            using (var store1 = TestingDocumentStore.For(_ =>
+            using (var store1 = StoreOptions(_ =>
             {
                 _.Schema.For<Target>().Index(x => x.Number);
             }))
@@ -336,7 +447,7 @@ namespace Marten.Testing.Acceptance
                 store1.Tenancy.Default.EnsureStorageExists(typeof(Target));
             }
 
-            using (var store2 = DocumentStore.For(_ =>
+            using (var store2 = SeparateStore(_ =>
             {
                 _.Connection(ConnectionSource.ConnectionString);
                 _.Schema.For<Target>().Index(x => x.Number);
@@ -344,8 +455,12 @@ namespace Marten.Testing.Acceptance
             {
                 var patch = store2.Schema.ToPatch(typeof(Target));
 
-                patch.UpdateDDL.ShouldNotContain("mt_doc_target_idx_number");
+                SpecificationExtensions.ShouldNotContain(patch.UpdateDDL, "mt_doc_target_idx_number");
             }
+        }
+
+        public computed_indexes() : base("acceptance")
+        {
         }
     }
 }

@@ -1,16 +1,15 @@
-﻿using StructureMap;
-using User = Marten.Testing.Documents.User;
+using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 
 namespace Marten.Testing.Examples
 {
-    public class IdentityMapTests : IntegratedFixture
+    public class IdentityMapTests: IntegrationContext
     {
         // SAMPLE: using-identity-map
         public void using_identity_map()
         {
-
-            var user = new User {FirstName = "Tamba", LastName = "Hali"};
-            theStore.BulkInsert(new [] {user});
+            var user = new User { FirstName = "Tamba", LastName = "Hali" };
+            theStore.BulkInsert(new[] { user });
 
             // Open a document session with the identity map
             using (var session = theStore.OpenSession())
@@ -18,7 +17,11 @@ namespace Marten.Testing.Examples
                 session.Load<User>(user.Id)
                     .ShouldBeTheSameAs(session.Load<User>(user.Id));
             }
-        } 
+        }
+
         // ENDSAMPLE
+        public IdentityMapTests(DefaultStoreFixture fixture) : base(fixture)
+        {
+        }
     }
 }

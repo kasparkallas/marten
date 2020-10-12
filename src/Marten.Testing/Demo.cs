@@ -3,6 +3,7 @@ using System.Linq;
 using System.Linq.Expressions;
 using Marten.Linq;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
 using Shouldly;
 using Xunit;
 
@@ -19,7 +20,7 @@ namespace Marten.Testing
 
             public string Name { get; set; }
 
-            public Expression<Func<IQueryable<User>, User>> QueryIs()
+            public Expression<Func<IMartenQueryable<User>, User>> QueryIs()
             {
                 return x => x.FirstOrDefault(_ => _.UserName == Name);
             }
@@ -33,10 +34,9 @@ namespace Marten.Testing
             {
                 _.Connection(ConnectionSource.ConnectionString);
                 _.Logger(new ConsoleMartenLogger());
+                _.DatabaseSchemaName = "Demo";
 
                 _.Schema.For<User>().Duplicate(x => x.UserName);
-
-
             });
 
             // Cleans out all the database artifacts
@@ -50,11 +50,8 @@ namespace Marten.Testing
                 session.SaveChanges();
 
                 var user2 = session.Query(new FindUser("ian"));
-                user2
-                    .ShouldNotBeNull();
-
+                SpecificationExtensions.ShouldNotBeNull(user2);
             }
-
         }
     }
 }

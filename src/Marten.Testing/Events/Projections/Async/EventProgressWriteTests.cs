@@ -1,20 +1,19 @@
-using System.Threading.Tasks;
 using Baseline;
 using Marten.Events;
 using Marten.Events.Projections.Async;
+using Marten.Testing.Harness;
 using Marten.Util;
 using Shouldly;
 using Xunit;
 
 namespace Marten.Testing.Events.Projections.Async
 {
-    public class EventProgressWriteTests : IntegratedFixture
+    public class EventProgressWriteTests: IntegrationContext
     {
-        public EventProgressWriteTests()
+        public EventProgressWriteTests(DefaultStoreFixture fixture) : base(fixture)
         {
             theStore.Tenancy.Default.EnsureStorageExists(typeof(EventStream));
         }
-
 
         [Fact]
         public void can_register_progress_initial()
@@ -24,7 +23,6 @@ namespace Marten.Testing.Events.Projections.Async
                 var events = theStore.Events;
                 session.QueueOperation(new EventProgressWrite(events, "summary", 111));
                 session.SaveChanges();
-
 
                 var last =
                     session.Connection.CreateCommand(
@@ -56,6 +54,5 @@ namespace Marten.Testing.Events.Projections.Async
                 last.ShouldBe(222);
             }
         }
-
     }
 }

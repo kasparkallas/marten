@@ -9,14 +9,19 @@ using Marten.Linq;
 using Marten.Util;
 using Marten.Schema;
 using Marten.Testing.Documents;
+using Marten.Testing.Harness;
+using Xunit.Abstractions;
 
 namespace Marten.Testing.Linq
 {
-	public class StringNotVisitorTests : DocumentSessionFixture<NulloIdentityMap>
+	public class StringNotVisitorTests : IntegrationContext
 	{
-		public StringNotVisitorTests()
+        private readonly ITestOutputHelper _output;
+
+        public StringNotVisitorTests(DefaultStoreFixture fixture, ITestOutputHelper output) : base(fixture)
 		{
-			var entry = new User() { FirstName = "Beeblebrox" };
+            _output = output;
+            var entry = new User() { FirstName = "Beeblebrox" };
 			var entry2 = new User() { FirstName = "Bee" };
 			var entry3 = new User() { FirstName = "Zaphod" };
 			var entry4 = new User() { FirstName = "Zap" };
@@ -25,7 +30,6 @@ namespace Marten.Testing.Linq
 		}
 
 		[Theory]
-		[InlineData("zap", StringComparison.OrdinalIgnoreCase, 3)]
 		[InlineData("zap", StringComparison.OrdinalIgnoreCase, 3)]
 		[InlineData("Zap", StringComparison.CurrentCulture, 3)]
 		[InlineData("zap", StringComparison.CurrentCulture, 4)]

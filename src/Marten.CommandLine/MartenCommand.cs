@@ -1,16 +1,20 @@
-﻿using Oakton;
+using Microsoft.Extensions.DependencyInjection;
+using Oakton;
 
 namespace Marten.CommandLine
 {
-    public abstract class MartenCommand<T> : OaktonCommand<T> where T : MartenInput
+    public abstract class MartenCommand<T>: OaktonCommand<T> where T : MartenInput
     {
         public override bool Execute(T input)
         {
             try
             {
-                using (var store = input.CreateStore())
+                using (var host = input.BuildHost())
                 {
-                    return execute(store, input);
+                    using (var store = host.Services.GetRequiredService<IDocumentStore>())
+                    {
+                        return execute(store, input);
+                    }
                 }
             }
             finally

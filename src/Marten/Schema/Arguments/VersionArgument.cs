@@ -1,12 +1,16 @@
-﻿using System;
+using System;
 using System.Linq.Expressions;
 using System.Reflection;
 using Baseline;
+using LamarCodeGeneration;
+using LamarCodeGeneration.Model;
+using Marten.Internal.CodeGeneration;
+using Marten.Schema.Identity;
 using NpgsqlTypes;
 
 namespace Marten.Schema.Arguments
 {
-    public class VersionArgument : UpsertArgument
+    public class VersionArgument: UpsertArgument
     {
         public const string ArgName = "docVersion";
 
@@ -17,45 +21,45 @@ namespace Marten.Schema.Arguments
         public VersionArgument()
         {
             Arg = ArgName;
-            Column = DocumentMapping.VersionColumn;
+            Column = SchemaConstants.VersionColumn;
             DbType = NpgsqlDbType.Uuid;
             PostgresType = "uuid";
         }
 
-        public override Expression CompileBulkImporter(DocumentMapping mapping, EnumStorage enumStorage, Expression writer, ParameterExpression document, ParameterExpression alias, ParameterExpression serializer, ParameterExpression textWriter, ParameterExpression tenantId)
+        public override void GenerateCodeToModifyDocument(GeneratedMethod method, GeneratedType type, int i, Argument parameters,
+            DocumentMapping mapping, StoreOptions options)
         {
-            Expression value = Expression.Call(_newGuid);
-
-            var dbType = Expression.Constant(DbType);
-
-            var method = writeMethod.MakeGenericMethod(typeof(Guid));
-
-            var writeExpression = Expression.Call(writer, method, value, dbType);
-            if (mapping.VersionMember == null)
+            if (mapping.Metadata.Version.Member != null)
             {
-                return writeExpression;
-            }
-            else if (mapping.VersionMember is FieldInfo)
-            {
-                var fieldAccess = Expression.Field(document, (FieldInfo) mapping.VersionMember);
-                var fieldSetter = Expression.Assign(fieldAccess, value);
-
-                return Expression.Block(fieldSetter, writeExpression);
-            }
-            else
-            {
-                var property = mapping.VersionMember.As<PropertyInfo>();
-                var setMethod = property.SetMethod;
-                var callSetMethod = Expression.Call(document, setMethod, value);
-
-                return Expression.Block(callSetMethod, writeExpression);
+                // "_version" would be a field in the StorageOperation base class
+                method.Frames.SetMemberValue(mapping.Metadata.Version.Member, "_version", mapping.DocumentType, type);
             }
         }
 
-        public override Expression CompileUpdateExpression(EnumStorage enumStorage, ParameterExpression call, ParameterExpression doc, ParameterExpression updateBatch, ParameterExpression mapping, ParameterExpression currentVersion, ParameterExpression newVersion, ParameterExpression tenantId, bool useCharBufferPooling)
+
+        public override void GenerateCodeToSetDbParameterValue(GeneratedMethod method, GeneratedType type, int i, Argument parameters,
+            DocumentMapping mapping, StoreOptions options)
         {
-            var dbType = Expression.Constant(DbType);
-            return Expression.Call(call, _paramMethod, Expression.Constant(Arg), Expression.Convert(newVersion, typeof(object)), dbType);
+            method.Frames.Code("setVersionParameter({0}[{1}]);", parameters, i);
+        }
+
+        public override void GenerateBulkWriterCode(GeneratedType type, GeneratedMethod load, DocumentMapping mapping)
+        {
+            if (mapping.Metadata.Version.Member == null)
+            {
+                load.Frames.Code($"writer.Write({typeof(CombGuidIdGeneration).FullNameInCode()}.NewGuid(), {{0}});", NpgsqlDbType.Uuid);
+            }
+            else
+            {
+                load.Frames.Code($@"
+var version = {typeof(CombGuidIdGeneration).FullNameInCode()}.NewGuid();
+writer.Write(version, {{0}});
+", NpgsqlDbType.Uuid);
+
+                load.Frames.SetMemberValue(mapping.Metadata.Version.Member, "version", mapping.DocumentType, type);
+            }
+
+
         }
     }
 }

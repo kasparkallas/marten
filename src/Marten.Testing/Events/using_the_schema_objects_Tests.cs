@@ -1,27 +1,30 @@
-﻿using System;
-using Baseline;
+using System;
 using Marten.Events;
-using Marten.Schema;
 using Marten.Testing.Events.Projections;
+using Marten.Testing.Harness;
 using Shouldly;
-using StructureMap;
 using Xunit;
 
 namespace Marten.Testing.Events
 {
-    public class using_the_schema_objects_Tests
+    [Collection("schema_objects")]
+    public class using_the_schema_objects_Tests : OneOffConfigurationsContext
     {
         [Fact]
         public void can_build_schema_with_auto_create_none()
         {
             var id = Guid.NewGuid();
 
-            using (var store1 = DocumentStore.For(ConnectionSource.ConnectionString))
+            using (var store1 = DocumentStore.For(opts =>
+            {
+                opts.Connection(ConnectionSource.ConnectionString);
+                opts.DatabaseSchemaName = "samples";
+            }))
             {
                 using (var session = store1.OpenSession())
                 {
-                    session.Events.StartStream<Quest>(id, new QuestStarted {Name = "Destroy the Orb"},
-                        new MonsterSlayed {Name = "Troll"}, new MonsterSlayed {Name = "Dragon"});
+                    session.Events.StartStream<Quest>(id, new QuestStarted { Name = "Destroy the Orb" },
+                        new MonsterSlayed { Name = "Troll" }, new MonsterSlayed { Name = "Dragon" });
                     session.SaveChanges();
                 }
             }
@@ -29,6 +32,7 @@ namespace Marten.Testing.Events
             // SAMPLE: registering-event-types
             var store2 = DocumentStore.For(_ =>
             {
+                _.DatabaseSchemaName = "samples";
                 _.Connection(ConnectionSource.ConnectionString);
                 _.AutoCreateSchemaObjects = AutoCreate.None;
 
@@ -48,13 +52,12 @@ namespace Marten.Testing.Events
         [Fact]
         public void can_build_the_event_schema_objects_in_a_separted_schema()
         {
-            var store = TestingDocumentStore.For(_ =>
+            var store = StoreOptions(_ =>
             {
                 // SAMPLE: override_schema_name_event_store
                 _.Events.DatabaseSchemaName = "event_store";
-                // ENDSAMPLE 
+                // ENDSAMPLE
             });
-
 
             store.Tenancy.Default.EnsureStorageExists(typeof(EventStream));
 
@@ -69,23 +72,21 @@ namespace Marten.Testing.Events
         [Fact]
         public void can_build_the_mt_stream_schema_objects()
         {
-            var store = TestingDocumentStore.Basic();
+            theStore.Tenancy.Default.EnsureStorageExists(typeof(EventStream));
 
-            store.Tenancy.Default.EnsureStorageExists(typeof(EventStream));
+            var schemaDbObjectNames = theStore.Tenancy.Default.DbObjects.Functions();
+            schemaDbObjectNames.ShouldContain($"{SchemaName}.mt_append_event");
 
-            var schemaDbObjectNames = store.Tenancy.Default.DbObjects.Functions();
-            schemaDbObjectNames.ShouldContain("public.mt_append_event");
-
-            var schemaTableNames = store.Tenancy.Default.DbObjects.SchemaTables();
-            schemaTableNames.ShouldContain("public.mt_streams");
-            schemaTableNames.ShouldContain("public.mt_events");
-            schemaTableNames.ShouldContain("public.mt_event_progression");
+            var schemaTableNames = theStore.Tenancy.Default.DbObjects.SchemaTables();
+            schemaTableNames.ShouldContain($"{SchemaName}.mt_streams");
+            schemaTableNames.ShouldContain($"{SchemaName}.mt_events");
+            schemaTableNames.ShouldContain($"{SchemaName}.mt_event_progression");
         }
 
         [Fact]
         public void can_build_the_mt_stream_schema_objects_in_different_database_schema()
         {
-            var store = TestingDocumentStore.For(_ =>
+            var store = SeparateStore(_ =>
             {
                 _.Events.DatabaseSchemaName = "other";
             });
@@ -99,6 +100,10 @@ namespace Marten.Testing.Events
             schemaTableNames.ShouldContain("other.mt_streams");
             schemaTableNames.ShouldContain("other.mt_events");
             schemaTableNames.ShouldContain("other.mt_event_progression");
+        }
+
+        public using_the_schema_objects_Tests() : base("schema_objects")
+        {
         }
     }
 }

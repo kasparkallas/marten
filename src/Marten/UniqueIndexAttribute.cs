@@ -1,11 +1,12 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Reflection;
+using Marten.Schema.Indexing.Unique;
 
 namespace Marten.Schema
 {
     [AttributeUsage(AttributeTargets.Field | AttributeTargets.Property)]
-    public class UniqueIndexAttribute : MartenAttribute
+    public class UniqueIndexAttribute: MartenAttribute
     {
         public override void Modify(DocumentMapping mapping, MemberInfo member)
         {
@@ -24,7 +25,8 @@ namespace Marten.Schema
                 membersGroupedByIndexName.Select(mg => new[] { mg.Member }).ToArray(),
                 IndexType,
                 IndexName,
-                IndexMethod);
+                IndexMethod,
+                TenancyScope);
         }
 
         /// <summary>
@@ -46,5 +48,10 @@ namespace Marten.Schema
         /// Specify Index type
         /// </summary>
         public UniqueIndexType IndexType = UniqueIndexType.Computed;
+
+        /// <summary>
+        /// Specify Tenancy for unique index
+        /// </summary>
+        public TenancyScope TenancyScope = TenancyScope.Global;
     }
 }
